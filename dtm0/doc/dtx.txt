@@ -563,6 +563,79 @@ M0C     => -------------------------------------------------------------- STABLE
 (Fig. 3)
 
 --------------------------------------------------------------------------------
+# SM diagrams Non-DTM version
+
+                      <RPC reply>
+                       \|/
+CAS_SM: INIT ---> SENT ---> FINAL
+             \|/
+              <RPC sent>
+
+
+                            <CAS_SM.FINAL N times>
+                             \|/
+DIX_SM: INIT ---> INPROGRESS ---> FINAL
+              |
+             \|/
+             +----------------------+
+             | CAS_SM: INIT -> SENT |
+             | N times              |
+             +----------------------+
+
+
+M0C_SM:
+        INIT
+         |
+         |
+        \|/
+        LAUNCHED <-+    +---------------------------+
+         |         | -> |DIX_SM: INIT -> INPROGRESS |
+         +---------+    +---------------------------+
+         |
+         | <- DIX_SM.FINAL
+         |
+        \|/
+        EXECUTED
+         |
+        \|/
+        STABLE
+
+Triggers:
+        <M0C_SM.LAUNCHED>: ... -> dix_put (CALL) -> dix_put_ast (AST) -> dix_discovery_ast (AST) -> ... ->
+                                -> dix_discovery_completed (CALL) -> ... -> dix__rop (CALL) -> ... ->
+                                -> <CAS_SM.SENT N times>.
+        <RPC reply>: cas_req_replied_cb (CLINK) -> cas_req_replied_ast (AST)
+                Causes SENT -> FINAL transition for CAS req SM.
+        <RPC sent>: posts an RPC item into the queue.
+        <CAS_SM.FINAL N times>: dix_cas_rop_clink_cb (CLINK) -> dix_rop_completed (AST)
+        <DIX_SM.FINAL>: dixreq_clink_cb (CLINK) -> dixreq_completed_ast(AST) ->
+                                -> idx_op_ast_complete (AST) -> idx_op_complete (CALL) ->
+                                -> sm_move (Locking another SM group)
+
+Contexts:
+        M0C operation sm group (op_sm_group)
+        M0C index operation sm group (oi_sm_grp)
+        DIX req sm group
+        CAS req sm group
+        RPC machine sm group
+
+Context executors:
+        RPC machine thread:
+                RPC machine sm group.
+        Locality thread:
+                M0C index operation sm group;
+                DIX req sm group;
+                CAS req sm group.
+        User thread (M0C operation sm group):
+                M0C operation sm group.
+
+Boundaries:
+        RPC machine <-> CAS req
+        M0C index operation sm group <-> M0C operation sm group
+
+
+--------------------------------------------------------------------------------
+# SM diagrams for DTM0 version
 
                       <RPC reply>
                        \|/
@@ -574,7 +647,8 @@ CAS_SM: INIT ---> SENT ---> FINAL
                             <DTX_SM.STABLE>
                              \|/
 DIX_SM: INIT ---> INPROGRESS ---> FINAL
-             /|\
+              |
+             \|/
              +----------------------+
              | CAS_SM: INIT -> SENT |
              | N times              |
@@ -616,7 +690,7 @@ M0C_SM:
          |         | -> |DIX_SM: INIT -> INPROGRESS |
          +---------+    |DTX_SM: INIT -> INPROGRESS |
          |              +---------------------------+
-	 |
+         |
          | <- DTX_SM: INPROGRESS -> EXECUTED
         \|/
         EXECUTED
@@ -624,5 +698,73 @@ M0C_SM:
          | <- DTX_SM: EXECUTED_ALL -> STABLE
         \|/
         STABLE
+
+--------------------------------------------------------------------------------
+CLINK + AST
+
+Use-case: When SM1 moves to FINAL state we want to update SM2 state.
+        SM1 is a part of SMG1, SM2 is a part of SMG2.
+
+
+SMG1                                    SMG2
+[ SMG1.SM1 ]                            [ SMG2.SM2 ]
+Lock { FORKQ = [] }                     Lock { FORKQ = {} }
+RunAsts { FORKQ = {} }                  ...
+Run  { FORKQ = {} }
+	SMG1.SM1: SENT -> FINAL
+                clink_cb()
+                SMG2.post_ast(AST1)     ... { FORKQ = [ AST1 ] }
+RunAsts { FORKQ = {} }                  RunAsts { FORKQ = [ AST1 ] }
+Unlock  { FORKQ = {} }                          AST1.sa_cb(AST1.sa_datum)
+                                                        modify(SMG2.SM2)
+                                                                SMG2.SM2.counter++;
+                                        Unlock { FORKQ = [] }
+(Fig. 1)
+
+
+Locality1
+SMG1
+[ FOM1, FOM2 ]
+FOM1.wait_on(...)
+
+
+Use-case: When SM1 moves to SENT state, SM2 must move to RECVD state;
+        when SM2 moves to RECVD state, SM1 and SM2 must move to INIT state:
+
+SM1: INIT -> SENT -+
+     /|\           |
+      +------------+
+
+SM2: INIT -> RECV -+
+      /|\          |
+       +-----------+
+
+(Fig. 2 - State transitions)
+
+SMG1                                    SMG2
+[ SMG1.SM1 ]                            [ SMG2.SM2 ]
+Lock { FORKQ = [] }                     Lock { FORKQ = {} }
+RunAsts { FORKQ = {} }                  ...
+Run  { FORKQ = {} }
+	SMG1.SM1: INIT -> SENT
+                clink_cb()
+                SMG1.post_ast(AST1)     ... { FORKQ = [ AST1 ] }
+RunAsts { FORKQ = {} }                  RunAsts { FORKQ = [ AST1 ] }
+Unlock  { FORKQ = {} }                          AST1.sa_cb(AST1.sa_datum)
+                                                        SMG2.SM2: INIT -> RECVD
+                                                        SMG2.SM2: RECVD -> INIT
+                                                                clink_cb()
+                                                                SMG1.post_ast(AST2)
+                                        Unlock { FORKQ = [] }
+Lock { FORKQ = [ AST2 ] }
+RunAsts { FORKQ = [ AST2 ] }
+        AST2.sa_cb(AST2.sa_datum)
+                SMG1.SM1: SENT -> INIT
+Run  { FORKQ = {} }
+	SMG1.SM1: INIT -> SENT
+                clink_cb()
+                ...
+(Fig. 3)
+
 
 --------------------------------------------------------------------------------
