@@ -21,6 +21,9 @@ Further reading/pre-requisites:
 
 * [Linux Kernel Development by Robert Love](https://rlove.org)
 
+* [Protothreads](https://github.com/contiki-os/contiki/blob/master/core/sys/pt.h)
+
+* [Motr Coroutines](https://github.com/Seagate/cortx-motr/blob/main/lib/coroutine.h)
 
 # Motr client-related SMs.
 
@@ -287,8 +290,8 @@ sometimes, different threads (localities). As you saw, we had a point
 where we were awaiting on an "external" event - RPC reply. There are more
 use-cases like that: await on a request, await on a timer, await on
 a disk IO operation and so on. One of the common ways to implement
-such kind of abstractions is to introduce the running vs. waiting
-queue idea. When a task is block on something (IO, network, timer),
+such kind of abstractions is to introduce the running+waiting
+queues idea. When a task is block on something (IO, network, timer),
 the scheduler puts it into the list of "sleeping" tasks, and then,
 at some point, a event "wakes up" such a task, and the scheduler
 puts it back into the run queue.
@@ -302,7 +305,19 @@ Additionally, FOMs have the following useful features:
 * "Cooperative" locks (see the long lock) that allow the FOMs
 	to wait on each other.
 
-* Generic phases that execute common operations requrired for
+* Generic phases that execute common operations required for
 	most of the FOPs.
 
-<EOF>
+# Time-lines for DTX
+
+![TimeLine overview for DTX](./tline_overview.svg)
+
+![TimeLine DTX DIX InProgress](./tline_dtx_dix_I.png)
+
+![TimeLine DTX DIX Executed](./tline_dtx_dix_E.png)
+
+![TimeLine CAS triggers InProgress](./tline_cas_I_trigger.png)
+
+![TimeLine CAS triggers Executed](./tline_cas_E_trigger.png)
+
+![TimeLine DTX DIX Stable](./tline_dtx_dix_S.png)
