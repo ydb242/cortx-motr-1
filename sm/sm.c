@@ -443,6 +443,10 @@ static void state_set(struct m0_sm *mach, int state, int32_t rc)
 			delta = m0_time_sub(now, mach->sm_state_epoch) >> 10;
 			M0_ASSERT(stats->as_nr == 0 || trans < stats->as_nr);
 			if (stats->as_id != 0) {
+
+				M0_LOG(M0_DEBUG, "id=%d sm_id=%d sm_trans=%d sm_state=%d",
+				       (int)stats->as_id, (int)m0_sm_id_get(mach), trans, state);
+
 				M0_ADDB2_ADD(stats->as_id, m0_sm_id_get(mach),
 					     trans, state);
 			}

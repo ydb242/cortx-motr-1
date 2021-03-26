@@ -104,6 +104,11 @@ enum m0_addb2_value_id {
 	/** Measurement: memory allocation. */
 	M0_AVI_ALLOC,
 
+	/* XXX: move to different place */
+	M0_AVI_DTX0_SM_STATE,
+	M0_AVI_DTX0_SM_COUNTER,
+	M0_AVI_DTX0_SM_COUNTER_END = M0_AVI_DTX0_SM_COUNTER + 0x100,
+
 	M0_AVI_RM_RANGE_START      = 0x4000,
 	M0_AVI_M0T1FS_RANGE_START  = 0x5000,
 	M0_AVI_IOS_RANGE_START     = 0x6000,

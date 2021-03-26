@@ -341,9 +341,15 @@ static void dtm0_service_fini(struct m0_reqh_service *service)
         m0_free(service);
 }
 
+#include "addb2/identifier.h"
+
 M0_INTERNAL int m0_dtm0_stype_init(void)
 {
-	return m0_reqh_service_type_register(&dtm0_service_type);
+	extern struct m0_sm_conf dtx_sm_conf;
+
+	return m0_sm_addb2_init(&dtx_sm_conf,
+				M0_AVI_DTX0_SM_STATE, M0_AVI_DTX0_SM_COUNTER) ?:
+		m0_reqh_service_type_register(&dtm0_service_type);
 }
 
 M0_INTERNAL void m0_dtm0_stype_fini(void)

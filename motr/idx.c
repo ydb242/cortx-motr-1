@@ -162,6 +162,12 @@ static int idx_op_init(struct m0_idx *idx, int opcode,
 		oi->oi_dtx = m0_dtx0_alloc(m0c->m0c_dtms, oi->oi_sm_grp);
 		if (oi->oi_dtx == NULL)
 			return M0_ERR(-ENOMEM);
+
+		{
+			uint64_t cid = m0_sm_id_get(&op->op_sm);
+			uint64_t did = m0_sm_id_get(&oi->oi_dtx->tx_dtx->dd_sm);
+			M0_ADDB2_ADD(M0_AVI_CLIENT_TO_DIX, cid, did);
+		}
 	}
 #else
 	oi->oi_dtx = NULL;

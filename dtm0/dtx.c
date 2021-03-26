@@ -81,7 +81,7 @@ static struct m0_sm_trans_descr dtx_trans[] = {
 	{ "prune",      M0_DDS_STABLE,       M0_DDS_DONE         }
 };
 
-static struct m0_sm_conf dtx_sm_conf = {
+struct m0_sm_conf dtx_sm_conf = {
 	.scf_name      = "dtm0dtx",
 	.scf_nr_states = ARRAY_SIZE(dtx_states),
 	.scf_state     = dtx_states,
@@ -146,6 +146,7 @@ static struct m0_dtm0_dtx *m0_dtm0_dtx_alloc(struct m0_dtm0_service *svc,
 		rec->dlr_dtx.dd_ancient_dtx.tx_dtx = &rec->dlr_dtx;
 		m0_sm_init(&rec->dlr_dtx.dd_sm, &dtx_sm_conf, M0_DDS_INIT,
 			   group);
+		m0_sm_addb2_counter_init(&rec->dlr_dtx.dd_sm);
 	}
 	return &rec->dlr_dtx;
 }

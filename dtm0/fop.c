@@ -107,11 +107,43 @@ M0_INTERNAL void m0_dtm0_fop_fini(void)
 	m0_xc_dtm0_fop_fini();
 }
 
+enum {
+	M0_FOPH_DTM0_LOGGING = M0_FOPH_TYPE_SPECIFIC,
+};
+
+struct m0_sm_state_descr dtm0_phases[] = {
+	[M0_FOPH_DTM0_LOGGING] = {
+		.sd_name      = "logging",
+		.sd_allowed   = M0_BITS(M0_FOPH_SUCCESS,
+					M0_FOPH_FAILURE)
+	},
+};
+
+struct m0_sm_trans_descr dtm0_phases_trans[] = {
+	[ARRAY_SIZE(m0_generic_phases_trans)] =
+	{"dtm0_1-fail", M0_FOPH_TYPE_SPECIFIC, M0_FOPH_FAILURE},
+	{"dtm0_1-success", M0_FOPH_TYPE_SPECIFIC, M0_FOPH_SUCCESS},
+};
+
+static struct m0_sm_conf dtm0_conf = {
+	.scf_name      = "dtm0-fom",
+	.scf_nr_states = ARRAY_SIZE(dtm0_phases),
+	.scf_state     = dtm0_phases,
+	.scf_trans_nr  = ARRAY_SIZE(dtm0_phases_trans),
+	.scf_trans     = dtm0_phases_trans,
+};
+
 M0_INTERNAL int m0_dtm0_fop_init(void)
 {
 	static int init_once = 0;
 	if (init_once++ > 0)
 		return 0;
+
+	m0_sm_conf_extend(m0_generic_conf.scf_state, dtm0_phases,
+			  m0_generic_conf.scf_nr_states);
+	m0_sm_conf_trans_extend(&m0_generic_conf, &dtm0_conf);
+	m0_sm_conf_init(&dtm0_conf);
+
 
 	m0_xc_dtm0_fop_init();
 	M0_FOP_TYPE_INIT(&dtm0_req_fop_fopt,
@@ -120,7 +152,7 @@ M0_INTERNAL int m0_dtm0_fop_init(void)
 			 .xt        = dtm0_req_fop_xc,
 			 .rpc_flags = M0_RPC_MUTABO_REQ,
 			 .fom_ops   = &dtm0_req_fom_type_ops,
-			 .sm        = &m0_generic_conf,
+			 .sm        = &dtm0_conf,
 			 .svc_type  = &dtm0_service_type);
 	M0_FOP_TYPE_INIT(&dtm0_rep_fop_fopt,
 			 .name      = "DTM0 reply",
@@ -128,7 +160,7 @@ M0_INTERNAL int m0_dtm0_fop_init(void)
 			 .xt        = dtm0_rep_fop_xc,
 			 .rpc_flags = M0_RPC_ITEM_TYPE_REPLY,
 			 .fom_ops   = &dtm0_req_fom_type_ops);
-	return 0;
+	return m0_fop_type_addb2_instrument(&dtm0_req_fop_fopt);
 }
 
 /*
@@ -210,7 +242,11 @@ static size_t dtm0_fom_locality(const struct m0_fom *fom)
 	return M0_RC_INFO(locality++, "fom=%p", fom);
 }
 
-static void m0_dtm0_send_notice(struct m0_dtm0_service *dtms,
+#include "addb2/addb2.h"
+#include "addb2/identifier.h"
+
+static void m0_dtm0_send_notice(struct m0_fom *fom,
+				struct m0_dtm0_service *dtms,
 				enum m0_dtm0s_msg notice_type,
 				const struct m0_fid *tgt,
 				const struct m0_dtm0_tx_desc *txd)
@@ -220,6 +256,8 @@ static void m0_dtm0_send_notice(struct m0_dtm0_service *dtms,
 	struct m0_rpc_item     *item;
 	struct dtm0_req_fop    *req;
 	int                     rc;
+	uint64_t                phase_sm_id;
+	uint64_t                rpc_sm_id;
 
 	M0_ENTRY("reqh=%p", dtms->dos_generic.rs_reqh);
 
@@ -235,6 +273,11 @@ static void m0_dtm0_send_notice(struct m0_dtm0_service *dtms,
 	req               = m0_fop_data(fop);
 	req->dtr_msg      = notice_type;
 	rc = m0_dtm0_tx_desc_copy(txd, &req->dtr_txr) ?: m0_rpc_post(item);
+
+	phase_sm_id = m0_sm_id_get(&fom->fo_sm_phase);
+	rpc_sm_id   = m0_sm_id_get(&item->ri_sm);
+	M0_ADDB2_ADD(M0_AVI_FOM_TO_TX, phase_sm_id, rpc_sm_id);
+
 	/* XXX: We could ignore this error in the real setup:
 	 * the caller's FOM should be in the FINISHED (terminal) state,
 	 * and there no much to do on their side to handle this error.
@@ -248,7 +291,8 @@ static void m0_dtm0_send_notice(struct m0_dtm0_service *dtms,
 }
 
 
-M0_INTERNAL void m0_dtm0_on_committed(struct m0_reqh               *reqh,
+M0_INTERNAL void m0_dtm0_on_committed(struct m0_fom                *fom,
+				      struct m0_reqh               *reqh,
 				      const struct m0_dtm0_tx_desc *txd)
 {
 	int                     rc;
@@ -275,7 +319,7 @@ M0_INTERNAL void m0_dtm0_on_committed(struct m0_reqh               *reqh,
 	}
 
 	/* Notify the originator */
-	m0_dtm0_send_notice(dtms, DTM_PERSISTENT, &msg.dtd_id.dti_fid, &msg);
+	m0_dtm0_send_notice(fom, dtms, DTM_PERSISTENT, &msg.dtd_id.dti_fid, &msg);
 
 	/* TODO: Send notices to the rest of the participants. */
 	m0_dtm0_tx_desc_fini(&msg);
@@ -310,7 +354,7 @@ static int dtm0_fom_tick(struct m0_fom *fom)
 		 */
 		if (req->dtr_msg == DMT_EXECUTE &&
 		    m0_dtm0_is_a_persistent_dtm(fom->fo_service)) {
-			m0_dtm0_send_notice(svc, DTM_PERSISTENT,
+			m0_dtm0_send_notice(fom, svc, DTM_PERSISTENT,
 					    &M0_FID_INIT(0x7300000000000001,
 							0x1a),
 					    &req->dtr_txr);

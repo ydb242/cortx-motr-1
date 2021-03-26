@@ -142,7 +142,7 @@ static void val_dump(struct m0_addb2__context *ctx, const char *prefix,
 static void context_fill(struct m0_addb2__context *ctx,
                          const struct m0_addb2_value *val);
 
-static void file_dump(struct m0_stob_domain *dom, const char *fname, 
+static void file_dump(struct m0_stob_domain *dom, const char *fname,
 		      const uint64_t start_time, const uint64_t stop_time);
 
 static int  plugin_load(struct plugin *plugin);
@@ -188,6 +188,8 @@ static int plugin_add(const char *path)
     return M0_RC(0);
 }
 
+M0_INTERNAL int m0_dtm0_fop_init(void);
+
 int main(int argc, char **argv)
 {
 	struct m0_stob_domain  *dom;
@@ -204,6 +206,18 @@ int main(int argc, char **argv)
 		err(EX_CONFIG, "Cannot initialise motr: %d", result);
 
 	misc_init();
+
+
+	/* XXX: !!!   */
+	/* THIS IS A VERY ====BAD==== place of initialisation of dtm fom types.
+	 * THEY ARE here just because of my laziness.
+	 *
+	 * Please, remove ASAAAAAAP!
+	 *
+	 * --Anatoliy.
+	 */
+	m0_dtm0_fop_init();
+
 
 	result = M0_GETOPTS("m0addb2dump", argc, argv,
 			M0_FORMATARG('o', "Starting offset",
@@ -346,7 +360,7 @@ static bool intrps_equal(const struct m0_addb2__id_intrp *intrp0,
     return memcmp(intrp0, intrp1, sizeof(struct m0_addb2__id_intrp)) == 0;
 }
 
-static void file_dump(struct m0_stob_domain *dom, const char *fname, 
+static void file_dump(struct m0_stob_domain *dom, const char *fname,
 		      const uint64_t start_time, const uint64_t stop_time)
 {
 	struct m0_stob         *stob;
@@ -837,10 +851,23 @@ static void tx_state(struct m0_addb2__context *ctx, const uint64_t *v,
 	sm_state(&be_tx_sm_conf, ctx, v, buf);
 }
 
+extern struct m0_sm_conf dtx_sm_conf;
+static void dtx0_state(struct m0_addb2__context *ctx, const uint64_t *v,
+                     char *buf)
+{
+	sm_state(&dtx_sm_conf, ctx, v, buf);
+}
+
 static void tx_state_counter(struct m0_addb2__context *ctx, char *buf)
 {
 	sm_trans(&be_tx_sm_conf, "tx", ctx, buf);
 }
+
+static void dtx0_state_counter(struct m0_addb2__context *ctx, char *buf)
+{
+	sm_trans(&dtx_sm_conf, "dtx0", ctx, buf);
+}
+
 
 extern struct m0_sm_conf op_states_conf;
 static void beop_state_counter(struct m0_addb2__context *ctx, char *buf)
@@ -1123,6 +1150,12 @@ struct m0_addb2__id_intrp ids[] = {
 	  { &dec, &dec, &dec, &dec }, { "id", "opcode", "xid", "session_id" } },
 	{ M0_AVI_RPC_ITEM_ID_FETCH, "rpc-item-id-fetch",
 	  { &dec, &dec, &dec, &dec }, { "id", "opcode", "xid", "session_id" } },
+
+	{ M0_AVI_DTX0_SM_STATE,     "dtx0-state",    { &dtx0_state, SKIP2  } },
+	{ M0_AVI_DTX0_SM_COUNTER,   "",
+	  .ii_repeat = M0_AVI_DTX0_SM_COUNTER_END - M0_AVI_DTX0_SM_COUNTER,
+	  .ii_spec   = &dtx0_state_counter },
+
 	{ M0_AVI_BE_TX_STATE,     "tx-state",        { &tx_state, SKIP2  } },
 	{ M0_AVI_BE_TX_COUNTER,   "",
 	  .ii_repeat = M0_AVI_BE_TX_COUNTER_END - M0_AVI_BE_TX_COUNTER,

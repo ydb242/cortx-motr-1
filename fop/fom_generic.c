@@ -803,7 +803,7 @@ int m0_fom_tick_generic(struct m0_fom *fom)
 		rc = M0_FSO_WAIT;
 
 	M0_LEAVE("fom=%p phase=%s rc=%d", fom,
-		m0_fom_phase_name(fom, m0_fom_phase(fom)), rc);
+		 m0_fom_phase_name(fom, m0_fom_phase(fom)), rc);
 	return M0_RC(rc);
 }
 
