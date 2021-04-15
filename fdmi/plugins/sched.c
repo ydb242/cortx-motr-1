@@ -20,63 +20,71 @@
 */
 
 #define M0_TRACE_SUBSYSTEM M0_TRACE_SUBSYS_FDMI
-#include "lib/trace.h"
+
 #include "fdmi/plugins/sched.h"
 
-#include <unistd.h>           
-#include <getopt.h>
-#include <errno.h>
-
-/* sched client conf params */
-struct sched_conf {
-        char *local_addr;
-        char *ha_addr;
-        char *profile_fid;
-        char *process_fid;
-}c_params;
-
-static struct m0_semaphore 	sched_sem;
-struct m0_config		m0_conf = {};
-struct m0_client	       *m0_instance = NULL;
-struct m0_container	        container = {};
-static struct m0_idx_dix_config dix_conf = {};
+static void usage(void)
+{
+	m0_console_printf(
+		"Usage: ./m0sched "
+		"-l local_addr -h ha_addr -p profile_fid -f process_fid \n"
+		"Use -? or -i for more verbose help on common arguments.\n"
+		"Usage example for common arguments: \n"
+		"./m0sched -l 192.168.52.53@tcp:12345:4:1 "
+		"-h 192.168.52.53@tcp:12345:1:1 "
+		"-p 0x7000000000000001:0x37 -f 0x7200000000000001:0x19"
+		"\n");
+}
 
 /**
  * @retval 0      Success.
- * @retval 1      Help message printed. The program should be terminated.
  * @retval -Exxx  Error.
  */
 
-static int 
+static int
 sched_args_parse(struct sched_conf *params, int argc, char ** argv)
 {
-        int  c = 0;
-	static struct option opts[] = {
-				{"local",         required_argument, NULL, 'l'},
-				{"ha",            required_argument, NULL, 'H'},
-				{"profile",       required_argument, NULL, 'p'},
-				{"process",       required_argument, NULL, 'P'}};
-        while ((c = getopt_long(argc, argv, ":l:H:p:P:", opts, NULL)) != -1)
-	{
-		switch (c) {
-			case 'l': params->local_addr = optarg;
-				  continue;
-			case 'H': params->ha_addr = optarg;
-				  continue;
-			case 'p': params->profile_fid = optarg;
-				  continue;
-			case 'P': params->process_fid = optarg;
-				  continue;
-			case '?': fprintf(stderr, "Unsupported option '%c'\n",
-					  optopt);
-				  exit(EXIT_FAILURE);
-			case ':': fprintf(stderr, "No argument given for '%c'\n",
-				          optopt);
-				  exit(EXIT_FAILURE);
-			default:  fprintf(stderr, "Unsupported option '%c'\n", c);
-		}
+	int    rc = 0;
+
+	params->local_addr 	= NULL;
+	params->ha_addr    	= NULL;
+	params->profile_fid     = NULL;
+	params->process_fid   	= NULL;
+
+	rc = M0_GETOPTS("m0kv", argc, argv,
+			M0_HELPARG('?'),
+			M0_VOIDARG('i', "more verbose help",
+					LAMBDA(void, (void) {
+						usage();
+						exit(0);
+					})),
+			M0_STRINGARG('l', "Local endpoint address",
+					LAMBDA(void, (const char *string) {
+					params->local_addr = (char*)string;
+					})),
+			M0_STRINGARG('h', "HA address",
+					LAMBDA(void, (const char *str) {
+						params->ha_addr = (char*)str;
+					})),
+			M0_STRINGARG('f', "Process FID",
+					LAMBDA(void, (const char *str) {
+						params->process_fid = (char*)str;
+					})),
+			M0_STRINGARG('p', "Profile options for Client",
+					LAMBDA(void, (const char *str) {
+						params->profile_fid = (char*)str;
+					})));
+	if (rc != 0)
+		return M0_ERR(rc);
+	/* All mandatory params must be defined. */
+	if (rc == 0 &&
+	    (params->local_addr == NULL || params->ha_addr == NULL ||
+	     params->profile_fid == NULL || params->process_fid == NULL)) {
+		usage();
+		rc = M0_ERR(-EINVAL);
 	}
-	return (0);
+
+	return rc;
 }
 
 static int sched_init(struct sched_conf *conf)
@@ -87,14 +95,15 @@ static int sched_init(struct sched_conf *conf)
 	m0_conf.mc_profile               = conf->profile_fid;
 	m0_conf.mc_process_fid           = conf->process_fid;
 	m0_conf.mc_tm_recv_queue_min_len = M0_NET_TM_RECV_QUEUE_DEF_LEN;
-	m0_conf.mc_max_rpc_msg_size      = M0_RPC_DEF_MAX_RPC_MSG_SIZE; 	
+	m0_conf.mc_max_rpc_msg_size      = M0_RPC_DEF_MAX_RPC_MSG_SIZE;
 	m0_conf.mc_layout_id             = 1;
 	m0_conf.mc_is_oostore            = 1;
 	m0_conf.mc_is_read_verify        = 0;
 	m0_conf.mc_idx_service_id        = M0_IDX_DIX;
-	
+
 	dix_conf.kc_create_meta 	 = false;
- 	m0_conf.mc_idx_service_conf 	 = &dix_conf;
+	m0_conf.mc_idx_service_conf 	 = &dix_conf;
+
 	/* Client instance */
 	rc = m0_client_init(&m0_instance, &m0_conf, true);
 	if (rc != 0) {
@@ -103,11 +112,25 @@ static int sched_init(struct sched_conf *conf)
 	}
 
 	M0_POST(m0_instance != NULL);
+
+	/* And finally, client root realm */
+	m0_container_init(&container,
+				 NULL, &M0_UBER_REALM,
+				 m0_instance);
+
+	rc = container.co_realm.re_entity.en_sm.sm_rc;
+	if (rc != 0) {
+		fprintf(stderr, "Failed to open uber realm\n");
+		goto do_exit;
+	}
+
+	M0_POST(container.co_realm.re_instance != NULL);
+	uber_realm = container.co_realm;
 do_exit:
 	return rc;
 }
 
-static void sched_fini() 
+static void sched_fini()
 {
 	m0_client_fini(m0_instance, true);
 }
@@ -123,6 +146,7 @@ static void sched_sighandler(int signum)
 	/* Restore default handlers. */
 	signal(SIGINT, SIG_DFL);
 	signal(SIGTERM, SIG_DFL);
+
 }
 
 static int sched_sighandler_init(void)
@@ -166,7 +190,7 @@ int main(int argc, char **argv)
 
 	rc = sched_init(&c_params);
 	if (rc != 0) {
-		sched_fini();	
+		sched_fini();
 		return M0_ERR(errno);
 	}
 
@@ -174,13 +198,11 @@ int main(int argc, char **argv)
 	if (rc != 0)
 		goto sem_fini;
 	/* main thread loop */
-	while (1) {	
-		fprintf(stdout, "m0sched Listening...\n");
-		m0_semaphore_down(&sched_sem);
-	}
+	fprintf(stdout, "m0sched waiting for signal...\n");
+	m0_semaphore_down(&sched_sem);
 sem_fini:
 	m0_semaphore_fini(&sched_sem);
-	sched_fini();	
+	sched_fini();
 	return M0_RC(rc < 0 ? -rc : rc);
 }
 

@@ -26,8 +26,26 @@
 
 #include "fid/fid.h"
 #include "motr/client.h"
+#include "lib/getopts.h"	/* M0_GETOPTS */
+#include "lib/trace.h"
 
-void m0_sched_init();
-void m0_sched_fini();
+#include <unistd.h>
+#include <getopt.h>
+#include <errno.h>
+
+/* sched client conf params */
+struct sched_conf {
+	char *local_addr;
+	char *ha_addr;
+	char *profile_fid;
+	char *process_fid;
+} c_params;
+
+static struct m0_semaphore	sched_sem;
+static struct m0_config	m0_conf = {};
+static struct m0_client	*m0_instance = NULL;
+static struct m0_container	container = {};
+static struct m0_idx_dix_config	dix_conf = {};
+static struct m0_realm	uber_realm = {};
 
 #endif /*  __MOTR_FDMI_PLUGINS_SCHED_H__ */
