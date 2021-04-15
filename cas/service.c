@@ -1148,6 +1148,15 @@ static int cas_fom_tick(struct m0_fom *fom0)
 		if (cas_in_ut() && m0_fom_phase(fom0) == M0_FOPH_QUEUE_REPLY) {
 			m0_fom_phase_set(fom0, M0_FOPH_TXN_COMMIT_WAIT);
 		}
+		if (phase == M0_FOPH_FOL_REC_ADD) {
+			M0_LOG(M0_DEBUG, "finalise kv buffers here M0_FOPH_FOL_REC_ADD: %p\n", op);
+			struct m0_cas_rec *lrec;
+			for (i = 0; i < op->cg_rec.cr_nr; i++) {
+				lrec = cas_at(op, i);
+				cas_at_fini(&lrec->cr_key);
+				cas_at_fini(&lrec->cr_val);
+			}
+		}
 		break;
 	case CAS_CHECK_PRE:
 		rc = cas_id_check(&op->cg_id);
@@ -1598,6 +1607,19 @@ static void cas_fom_fini(struct m0_fom *fom0)
 {
 	struct cas_fom *fom = M0_AMB(fom, fom0, cf_fom);
 	uint64_t        i;
+	M0_LOG(M0_DEBUG,"fom0: %p cas_fom: %p", fom0, fom);
+	struct m0_cas_op *op = cas_op(fom0);
+	M0_LOG(M0_DEBUG, "op=%p key: %lu value=%lu ", op, op->cg_rec.cr_rec[0].cr_key.u.ab_buf.b_nob,
+			op->cg_rec.cr_rec[0].cr_val.u.ab_buf.b_nob);
+	/* Finalise input AT buffers. */
+	/*
+	struct m0_cas_rec *rec;
+	for (i = 0; i < op->cg_rec.cr_nr; i++) {
+		rec = cas_at(op, i);
+		cas_at_fini(&rec->cr_key);
+		cas_at_fini(&rec->cr_val);
+	}
+	*/
 
 	if (cas_in_ut() && cas__ut_cb_done != NULL)
 		cas__ut_cb_done(fom0);
@@ -2290,6 +2312,9 @@ static int cas_done(struct cas_fom *fom, struct m0_cas_op *op,
 	int                ctg_rc = m0_ctg_op_rc(&fom->cf_ctg_op);
 	int                rc;
 	bool               at_fini = true;
+	M0_ENTRY("cas_done cas_op=%p\n ", op);
+	M0_LOG(M0_DEBUG, "op=%p key: %lu value=%lu ", op, op->cg_rec.cr_rec[0].cr_key.u.ab_buf.b_nob,
+			op->cg_rec.cr_rec[0].cr_val.u.ab_buf.b_nob);
 
 	M0_ASSERT(fom->cf_ipos < op->cg_rec.cr_nr);
 	rec_out = cas_out_at(rep, fom->cf_opos);
@@ -2336,8 +2361,8 @@ static int cas_done(struct cas_fom *fom, struct m0_cas_op *op,
 
 	if (at_fini) {
 		/* Finalise input AT buffers. */
-		cas_at_fini(&rec->cr_key);
-		cas_at_fini(&rec->cr_val);
+		//cas_at_fini(&rec->cr_key);
+		//cas_at_fini(&rec->cr_val);
 	}
 	/*
 	 * Out buffers are passed to RPC AT layer. They will be deallocated
@@ -2345,6 +2370,9 @@ static int cas_done(struct cas_fom *fom, struct m0_cas_op *op,
 	 */
 	fom->cf_out_key = M0_BUF_INIT0;
 	fom->cf_out_val = M0_BUF_INIT0;
+	M0_LOG(M0_DEBUG, "op = %p key: %lu value=%lu ", op,op->cg_rec.cr_rec[0].cr_key.u.ab_buf.b_nob,
+			op->cg_rec.cr_rec[0].cr_val.u.ab_buf.b_nob);
+	M0_LEAVE("cas_done cas_op=%p\n ", op);
 
 	return rec_out->cr_rc;
 }

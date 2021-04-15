@@ -424,6 +424,7 @@ M0_INTERNAL int m0_fop_rep_xc_type(const struct m0_xcode_obj   *par,
 	return fop_xc_type(rp->ffrp_rep_code, out);
 }
 
+
 M0_INTERNAL int m0_fop_fol_add(struct m0_fop *fop, struct m0_fop *rep,
 			       struct m0_dtx *dtx)
 {

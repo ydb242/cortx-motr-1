@@ -51,7 +51,7 @@ sched_args_parse(struct sched_conf *params, int argc, char ** argv)
 	params->profile_fid     = NULL;
 	params->process_fid   	= NULL;
 
-	rc = M0_GETOPTS("m0kv", argc, argv,
+	rc = M0_GETOPTS("m0sched", argc, argv,
 			M0_HELPARG('?'),
 			M0_VOIDARG('i', "more verbose help",
 					LAMBDA(void, (void) {
