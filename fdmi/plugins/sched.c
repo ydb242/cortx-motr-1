@@ -26,11 +26,11 @@
 static void usage(void)
 {
 	m0_console_printf(
-		"Usage: ./m0sched "
+		"Usage: m0sched "
 		"-l local_addr -h ha_addr -p profile_fid -f process_fid \n"
 		"Use -? or -i for more verbose help on common arguments.\n"
 		"Usage example for common arguments: \n"
-		"./m0sched -l 192.168.52.53@tcp:12345:4:1 "
+		"m0sched -l 192.168.52.53@tcp:12345:4:1 "
 		"-h 192.168.52.53@tcp:12345:1:1 "
 		"-p 0x7000000000000001:0x37 -f 0x7200000000000001:0x19"
 		"\n");
