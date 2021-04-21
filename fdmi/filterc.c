@@ -33,8 +33,10 @@ static void m0_filterc_stop(struct m0_filterc_ctx *ctx);
 static int m0_filterc_open(struct m0_filterc_ctx    *ctx,
                            enum m0_fdmi_rec_type_id  rec_type_id,
                            struct m0_filterc_iter   *iter);
-static int m0_filterc_get_next(struct m0_filterc_iter     *iter,
-                               struct m0_conf_fdmi_filter **out);
+/*static int m0_filterc_get_next(struct m0_filterc_iter     *iter,
+                               struct m0_conf_fdmi_filter **out);*/
+static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
+				       struct m0_conf_fdmi_filter **out);
 static void m0_filterc_close(struct m0_filterc_iter *iter);
 
 
@@ -42,7 +44,8 @@ const struct m0_filterc_ops filterc_def_ops = {
 	.fco_start     = m0_filterc_start,
 	.fco_stop      = m0_filterc_stop,
 	.fco_open      = m0_filterc_open,
-	.fco_get_next  = m0_filterc_get_next,
+	//.fco_get_next  = m0_filterc_get_next,
+	.fco_get_next  = filterc_send_harcode_get_next,
 	.fco_close     = m0_filterc_close
 };
 
@@ -126,6 +129,8 @@ static int open_filter_group(struct m0_filterc_ctx    *ctx,
 
 	m0_confc_close(flt_grp_tmp);
 	m0_confc_close(flt_grp_dir);
+	//TODO Somnath changes hardcode filter for prototype
+	rc = 0;
 open_err:
 	return M0_RC(rc);
 }
@@ -147,7 +152,7 @@ static int m0_filterc_open(struct m0_filterc_ctx    *ctx,
 find_err:
 	return M0_RC(rc);
 }
-
+/*
 static int m0_filterc_get_next(struct m0_filterc_iter     *iter,
                                struct m0_conf_fdmi_filter **out)
 {
@@ -163,7 +168,56 @@ static int m0_filterc_get_next(struct m0_filterc_iter     *iter,
 
 	return M0_RC(rc);
 }
+*/
 
+static struct m0_conf_fdmi_filter g_conf_filter;
+// Plugin FID.
+static struct m0_fid CLASSIFY_PLUGIN_FID = {
+    .f_container = M0_FDMI_REC_TYPE_FOL,
+    .f_key = 0x1
+};
+static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
+				       struct m0_conf_fdmi_filter **out)
+{
+	int                         rc;
+	struct m0_conf_fdmi_filter *conf_flt = &g_conf_filter;
+	struct m0_fdmi_filter      *flt = &conf_flt->ff_filter;
+	struct m0_fdmi_flt_node    *root;
+	//struct m0_buf               var = M0_BUF_INITS("hardcode");
+	static bool		   first_filter = true;
+	static int count = 0;
+	M0_ENTRY("count %d", count);
+	if (count < 9) {
+		++count;
+		*out = NULL;
+		return 0;
+	}
+
+	if (first_filter) {
+		root = m0_fdmi_flt_op_node_create(
+			M0_FFO_OR,
+			m0_fdmi_flt_bool_node_create(true),
+			m0_fdmi_flt_bool_node_create(false)
+			/*m0_fdmi_flt_var_node_create(&var)*/);
+
+		m0_fdmi_filter_init(flt);
+
+		m0_fdmi_filter_root_set(flt, root);
+
+		M0_ALLOC_ARR(conf_flt->ff_endpoints, 1);
+		//conf_flt->ff_endpoints[0] = g_rpc_env.ep_addr_remote;
+		conf_flt->ff_endpoints[0] = "192.168.52.53@tcp:12345:4:1";
+		conf_flt->ff_filter_id = CLASSIFY_PLUGIN_FID;
+		*out = conf_flt;
+		rc = 1;
+		first_filter = false;
+	} else {
+		*out = NULL;
+		rc = 0;
+		first_filter = true;
+	}
+	return rc;
+}
 static void m0_filterc_close(struct m0_filterc_iter *iter)
 {
 	M0_ENTRY();

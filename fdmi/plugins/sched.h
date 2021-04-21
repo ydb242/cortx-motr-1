@@ -26,12 +26,21 @@
 
 #include "fid/fid.h"
 #include "motr/client.h"
+#include "motr/client_internal.h"
 #include "lib/getopts.h"	/* M0_GETOPTS */
 #include "lib/trace.h"
+#include "fdmi/fdmi.h"
+#include "fdmi/plugin_dock.h"
+#include "fdmi/service.h"
+#include "reqh/reqh.h"
+#include "ut/ut.h"
 
 #include <unistd.h>
 #include <getopt.h>
 #include <errno.h>
+#include <stddef.h>             /* ptrdiff_t */
+#include <fcntl.h>
+#include <stdio.h>
 
 /* sched client conf params */
 struct sched_conf {
@@ -43,7 +52,7 @@ struct sched_conf {
 
 static struct m0_semaphore	sched_sem;
 static struct m0_config	m0_conf = {};
-static struct m0_client	*m0_instance = NULL;
+static struct m0_client	*m0c = NULL;
 static struct m0_container	container = {};
 static struct m0_idx_dix_config	dix_conf = {};
 static struct m0_realm	uber_realm = {};

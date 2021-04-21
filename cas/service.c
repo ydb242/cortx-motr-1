@@ -719,7 +719,6 @@ static int cas_at_reply(struct m0_rpc_at_buf *in,
 
 	return m0_rpc_at_reply(in, out, repbuf, fom, next_phase);
 }
-
 static void cas_at_fini(struct m0_rpc_at_buf *ab)
 {
 	if (cas_in_ut()) {
@@ -729,7 +728,6 @@ static void cas_at_fini(struct m0_rpc_at_buf *ab)
 
 	m0_rpc_at_fini(ab);
 }
-
 static void cas_incoming_kv(const struct cas_fom *fom,
 			    uint64_t              rec_pos,
 			    struct m0_buf        *key,
@@ -1148,6 +1146,7 @@ static int cas_fom_tick(struct m0_fom *fom0)
 		if (cas_in_ut() && m0_fom_phase(fom0) == M0_FOPH_QUEUE_REPLY) {
 			m0_fom_phase_set(fom0, M0_FOPH_TXN_COMMIT_WAIT);
 		}
+		/*
 		if (phase == M0_FOPH_FOL_REC_ADD) {
 			M0_LOG(M0_DEBUG, "finalise kv buffers here M0_FOPH_FOL_REC_ADD: %p\n", op);
 			struct m0_cas_rec *lrec;
@@ -1157,6 +1156,7 @@ static int cas_fom_tick(struct m0_fom *fom0)
 				cas_at_fini(&lrec->cr_val);
 			}
 		}
+		*/
 		break;
 	case CAS_CHECK_PRE:
 		rc = cas_id_check(&op->cg_id);
@@ -1612,14 +1612,12 @@ static void cas_fom_fini(struct m0_fom *fom0)
 	M0_LOG(M0_DEBUG, "op=%p key: %lu value=%lu ", op, op->cg_rec.cr_rec[0].cr_key.u.ab_buf.b_nob,
 			op->cg_rec.cr_rec[0].cr_val.u.ab_buf.b_nob);
 	/* Finalise input AT buffers. */
-	/*
 	struct m0_cas_rec *rec;
 	for (i = 0; i < op->cg_rec.cr_nr; i++) {
 		rec = cas_at(op, i);
 		cas_at_fini(&rec->cr_key);
 		cas_at_fini(&rec->cr_val);
 	}
-	*/
 
 	if (cas_in_ut() && cas__ut_cb_done != NULL)
 		cas__ut_cb_done(fom0);

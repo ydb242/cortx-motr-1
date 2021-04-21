@@ -682,14 +682,14 @@ M0_INTERNAL void m0_save_m0_xcode_type(int fd, char tab[], const struct m0_xcode
 	write(fd, buffer, strlen(buffer));
 
 }
-M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec)
+M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 {
 	char filename[32];
 	int buffer_len = 4096;
 	char buffer[buffer_len];
 	int fd = 0;
 	static int fc = 0;
-	sprintf(filename, "/tmp/fol_rec_%p_%d", rec, fc);
+	sprintf(filename, "/tmp/fol_rec_%s_%p_%d", prefix, rec, fc);
 	M0_ENTRY("m0_save_m0_fol_rec fol rec=%p\n ", rec);
 	++fc;
 	//open the file
@@ -862,7 +862,7 @@ M0_INTERNAL int m0_be_tx_fol_add(struct m0_be_tx *tx, struct m0_fol_rec *rec)
 	//int m0_fol_rec_decode(struct m0_fol_rec *rec, struct m0_buf *at)
 	m0_fol_rec_init(&decoded_rec, NULL);
 	int dret = m0_fol_rec_decode(&decoded_rec, &tx->t_payload);
-	m0_save_m0_fol_rec(&decoded_rec);
+	m0_save_m0_fol_rec(&decoded_rec, "BE");
 
 	M0_LEAVE("m0_be_tx_fol_add fol rec=%p dret: %d\n", rec, dret);
 	return ret;
