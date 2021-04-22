@@ -833,6 +833,7 @@ ha_m0ham_LDADD     = $(top_builddir)/motr/libmotr.la
 #
 
 sbin_PROGRAMS     += fdmi/plugins/m0sched
+sbin_SCRIPTS     += fdmi/plugins/m0scheduler
 fdmi_plugins_m0sched_CPPFLAGS  = -DM0_TARGET='m0sched' $(AM_CPPFLAGS)
 fdmi_plugins_m0sched_LDADD     = $(top_builddir)/motr/libmotr.la
 

@@ -22,7 +22,7 @@
 #define M0_TRACE_SUBSYSTEM M0_TRACE_SUBSYS_FDMI
 
 #include "fdmi/plugins/sched.h"
-
+/*
 M0_INTERNAL void m0_save_m0_xcode_type(int fd, char tab[], const struct m0_xcode_type *xf_type)
 {
 	if (xf_type == NULL )
@@ -155,14 +155,12 @@ M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 		write(fd, buffer, strlen(buffer));
 		sprintf(buffer, "\t\t\t\tffrp_rep_code: %d\n", fp_frag->ffrp_rep_code);
 		write(fd, buffer, strlen(buffer));
-		/*
 		struct m0_xcode_obj obj = {
 			//.xo_type = m0_fop_fol_frag_xc,
 			.xo_type = m0_cas_op_xc,
 			.xo_ptr = fp_frag->ffrp_fop
 			//.xo_ptr = frag->rp_data
 		};
-		*/
 		//m0_xcode_print(&obj, buffer, buffer_len);
 
 		struct m0_cas_op *cas_op = fp_frag->ffrp_fop;
@@ -237,6 +235,7 @@ M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 	close(fd);
 	M0_LEAVE("fol rec ptr=%p\n", rec);
 }
+*/
 
 /* Added for m0crate key read*/
 M0_INTERNAL void find_key_parts(int key_len, void *key_addr, int *key_fp_len, struct m0_fid *key_sp){
