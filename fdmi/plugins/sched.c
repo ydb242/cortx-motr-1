@@ -238,6 +238,52 @@ M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 	M0_LEAVE("fol rec ptr=%p\n", rec);
 }
 
+/* Added for m0crate key read*/
+M0_INTERNAL void find_key_parts(int key_len, void *key_addr, int *key_fp_len, struct m0_fid *key_sp){
+	int key_sp_len = sizeof(struct m0_fid);
+	*key_fp_len = key_len - key_sp_len;
+	memcpy(key_sp, key_addr + *key_fp_len, key_sp_len);
+}
+
+M0_INTERNAL void m0_dump_m0_fol_rec_to_json(struct m0_fol_rec *rec)
+{
+	int i;
+
+	//m0_fol_frag:rp_link to this list
+	struct m0_fol_frag     *frag;
+	m0_tl_for(m0_rec_frag, &rec->fr_frags, frag) {
+
+		struct m0_fop_fol_frag *fp_frag = frag->rp_data;
+		struct m0_cas_op *cas_op = fp_frag->ffrp_fop;
+		struct m0_cas_recv cg_rec = cas_op->cg_rec;
+		struct m0_cas_rec *cr_rec = cg_rec.cr_rec;
+
+		for (i = 0; i < cg_rec.cr_nr; i++) {
+			struct m0_fid key_sp = {0, 0};
+			int key_fp_len = 0;
+			char *buffer;
+			find_key_parts(cr_rec[i].cr_key.u.ab_buf.b_nob, cr_rec[i].cr_key.u.ab_buf.b_addr,
+						&key_fp_len, &key_sp);
+
+			m0_console_printf("{ ");
+			m0_console_printf("\"fid\": "FID_F", ", FID_P(&cas_op->cg_id.ci_fid));
+
+			m0_console_printf("\"cr_key\": ");
+			if (key_fp_len > 0){
+				buffer = (char *)malloc(key_fp_len);
+				memcpy(buffer, cr_rec[i].cr_key.u.ab_buf.b_addr, key_fp_len);
+				buffer[key_fp_len] = '\0';
+				m0_console_printf(buffer);
+			}
+			m0_console_printf("%"PRIx64"%"""PRIx64", ", FID_P(&key_sp));
+
+			m0_console_printf("\"cr_val\": %s", (char *)cr_rec[i].cr_val.u.ab_buf.b_addr);
+			m0_console_printf(" }\n");
+		}
+	} m0_tl_endfor;
+
+}
+
 static void usage(void)
 {
 	m0_console_printf(
@@ -306,18 +352,17 @@ static int classify_handle_fdmi_rec_not(struct m0_uint128 *rec_id,
                     struct m0_buf fdmi_rec,
                     struct m0_fid filter_id)
 {
-    int rc = 0;
-    struct m0_fol_rec fol_rec;
+	int rc = 0;
+	struct m0_fol_rec fol_rec;
 
-    m0_fol_rec_init(&fol_rec, NULL);
-    m0_fol_rec_decode(&fol_rec, &fdmi_rec);
+	m0_fol_rec_init(&fol_rec, NULL);
+	m0_fol_rec_decode(&fol_rec, &fdmi_rec);
 
-	m0_save_m0_fol_rec(&fol_rec, "m0sched");
-	m0_console_printf("============plugin called====================\n");
+	m0_dump_m0_fol_rec_to_json(&fol_rec);
 
-    m0_fol_rec_fini(&fol_rec);
+	m0_fol_rec_fini(&fol_rec);
 
-    return rc;
+	return rc;
 }
 
 // Plugin FID.
