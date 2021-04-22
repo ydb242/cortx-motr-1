@@ -633,13 +633,12 @@ M0_INTERNAL bool m0_be_tx__is_fast(struct m0_be_tx *tx)
 {
 	return tx->t_fast;
 }
-/*
 M0_INTERNAL void m0_save_m0_xcode_type(int fd, char tab[], const struct m0_xcode_type *xf_type)
 {
 	int rc;
 	if (xf_type == NULL )
 		return;
-	int buffer_len = 4096;
+	int buffer_len = 512;
 	char *buffer = (char *)malloc(buffer_len);
 	int i = 0;
 	sprintf(buffer, "%sstruct m0_xcode_type: %p { \n", tab,xf_type);
@@ -690,8 +689,8 @@ M0_INTERNAL void m0_save_m0_xcode_type(int fd, char tab[], const struct m0_xcode
 }
 M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 {
-	char filename[32];
-	int buffer_len = 8192;
+	char filename[128];
+	int buffer_len = 512;
 	char *buffer = (char *)malloc(buffer_len);
 	int fd = 0;
 	int rc;
@@ -860,7 +859,6 @@ M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 		return;
 	}
 }
-*/
 M0_INTERNAL int m0_be_tx_fol_add(struct m0_be_tx *tx, struct m0_fol_rec *rec)
 {
 	//struct m0_fol_rec decoded_rec;
@@ -871,7 +869,6 @@ M0_INTERNAL int m0_be_tx_fol_add(struct m0_be_tx *tx, struct m0_fol_rec *rec)
 
 	int ret = m0_fol_rec_encode(rec, &tx->t_payload);
 	
-	/*
 	struct m0_fol_rec decoded_rec;
 	//int m0_fol_rec_decode(struct m0_fol_rec *rec, struct m0_buf *at)
 	m0_fol_rec_init(&decoded_rec, NULL);
@@ -879,7 +876,6 @@ M0_INTERNAL int m0_be_tx_fol_add(struct m0_be_tx *tx, struct m0_fol_rec *rec)
 	m0_save_m0_fol_rec(&decoded_rec, "BE");
 
 	M0_LEAVE("m0_be_tx_fol_add fol rec=%p ret: %d dret: %d\n", rec, ret, dret);
-	*/
 	return ret;
 }
 
