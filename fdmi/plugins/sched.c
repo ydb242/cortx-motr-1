@@ -237,11 +237,19 @@ M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 }
 */
 
-/* Added for m0crate key read*/
-M0_INTERNAL void find_key_parts(int key_len, void *key_addr, int *key_fp_len, struct m0_fid *key_sp){
-	int key_sp_len = sizeof(struct m0_fid);
-	*key_fp_len = key_len - key_sp_len;
-	memcpy(key_sp, key_addr + *key_fp_len, key_sp_len);
+M0_INTERNAL char *to_hex(void *addr, int len, char *buffer)
+{
+	int i;
+	int j;
+	buffer = (char *)malloc(len*2);
+	bzero(buffer, len);
+	if ( buffer == NULL ) {
+		m0_console_printf( "malloc failed\n");
+	}
+	for(i = 0, j = 0; i < (2 * len) && j < len; ++j) {
+		i += sprintf(buffer + i, "%02x", ((char *)addr)[j]);
+	}
+	return buffer;
 }
 
 M0_INTERNAL void m0_dump_m0_fol_rec_to_json(struct m0_fol_rec *rec)
@@ -258,26 +266,23 @@ M0_INTERNAL void m0_dump_m0_fol_rec_to_json(struct m0_fol_rec *rec)
 		struct m0_cas_rec *cr_rec = cg_rec.cr_rec;
 
 		for (i = 0; i < cg_rec.cr_nr; i++) {
-			struct m0_fid key_sp = {0, 0};
-			int key_fp_len = 0;
-			char *buffer;
-			find_key_parts(cr_rec[i].cr_key.u.ab_buf.b_nob, cr_rec[i].cr_key.u.ab_buf.b_addr,
-						&key_fp_len, &key_sp);
+			char *buffer = NULL;
 
 			m0_console_printf("{ ");
-			m0_console_printf("\"fid\": "FID_F", ", FID_P(&cas_op->cg_id.ci_fid));
 
-			m0_console_printf("\"cr_key\": ");
-			if (key_fp_len > 0){
-				buffer = (char *)malloc(key_fp_len);
-				memcpy(buffer, cr_rec[i].cr_key.u.ab_buf.b_addr, key_fp_len);
-				buffer[key_fp_len] = '\0';
-				m0_console_printf(buffer);
-			}
-			m0_console_printf("%"PRIx64"%"""PRIx64", ", FID_P(&key_sp));
+			buffer = to_hex(&cas_op->cg_id.ci_fid, sizeof(struct m0_fid), buffer);
+			m0_console_printf("\"fid\": \"%s\", ", buffer);
+			free(buffer);
 
-			m0_console_printf("\"cr_val\": %s", (char *)cr_rec[i].cr_val.u.ab_buf.b_addr);
+			buffer = to_hex(cr_rec[i].cr_key.u.ab_buf.b_addr, cr_rec[i].cr_key.u.ab_buf.b_nob, buffer);
+			m0_console_printf("\"cr_key\": \"%s\", ", buffer);
+			free(buffer);
+
+			buffer = to_hex(cr_rec[i].cr_val.u.ab_buf.b_addr, cr_rec[i].cr_val.u.ab_buf.b_nob, buffer);
+			m0_console_printf("\"cr_val\": \"%s\"", buffer);
+			free(buffer);
 			m0_console_printf(" }\n");
+
 		}
 	} m0_tl_endfor;
 
@@ -492,7 +497,7 @@ static void sched_fini()
 
 static void sched_sighandler(int signum)
 {
-	fprintf(stdout, "m0sched Interrupted by signal %d\n", signum);
+	m0_console_printf("m0sched Interrupted by signal %d\n", signum);
 	m0_semaphore_up(&sched_sem);
 	/* Restore default handlers. */
 	signal(SIGINT, SIG_DFL);

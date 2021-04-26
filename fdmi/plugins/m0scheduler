@@ -17,5 +17,97 @@
 # For any questions about this software or licensing,
 # please email opensource@seagate.com or cortx-questions@seagate.com.
 #
+import subprocess
+import signal
+from socket import gethostname
+import shlex
+import sys
+import json
+import ast
 
-print("m0scheduler called")
+kv_records = []
+def json_parser(kv_record):
+	kvs = json.loads(kv_record)
+	#print (kvs["fid"])
+	#print (kvs["cr_key"])
+	#print (kvs["cr_val"])
+	kv = {'fid': kvs["fid"], 'cr_key': kvs["cr_key"], 'cr_val': kvs["cr_val"]}
+	flag =  True
+	for kv_i in kv_records:
+		if kv['cr_key'] == kv_i['cr_key']:
+			#print(kv_records)
+			print("dedup: ", kv_i, kv)
+			flag = False
+			break
+
+	if flag == True:
+		kv_records.append(kv)
+
+def signal_handler(sig, frame):
+	print("CTRL + C pressed")
+	process.send_signal(sig)
+	process.wait()
+	print(kv_records)
+	sys.exit(0)
+def execute_command_and_get_output(cmd):
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    shell=True)
+    stdout, stderr = proc.communicate()
+    output_var = str(stdout, 'utf-8')
+    return output_var
+
+
+def get_m0sched_cmd():
+	#m0sched = "/home/931442/cortx-motr/fdmi/plugins/m0sched"
+	m0sched = "m0sched"
+	#opts = " -l 192.168.52.53@tcp:12345:4:1 -h 192.168.52.53@tcp:12345:1:1 -p 0x7000000000000001:0x37 -f 0x7200000000000001:0x19"
+	opts = " -l " + local_endpoint + " -h " + ha_endpoint + " -p " + profile_fid + " -f " + process_fid
+	return m0sched + opts
+def get_cluster_info():
+    ret = 0
+    global profile_fid
+    global ha_endpoint
+    global local_endpoint
+    global process_fid
+    cmd = 'hctl status --json'
+    cluster_info = execute_command_and_get_output(cmd)
+    cluster_js = json.loads(cluster_info)
+    if (cluster_info != None):
+        profile_fid = str(cluster_js["profiles"][0]["fid"])
+        nodes_data = cluster_js["nodes"]
+        #print("nodes_data: ", nodes_data[0]['svcs'][0]['ep']) #hax
+        #print("nodes_data: ", nodes_data[0]['svcs'][1]['ep']) #cond
+        #print("nodes_data: ", nodes_data[0]['svcs'][2]['ep']) #ios
+        #print("nodes_data: ", nodes_data[0]['svcs'][3]['ep']) #m01
+        #print("nodes_data: ", nodes_data[0]['svcs'][4]['ep']) #m02
+        ha_endpoint = str(nodes_data[0]['svcs'][0]['ep'])
+        local_endpoint = str(nodes_data[0]['svcs'][3]['ep'])
+        process_fid = str(nodes_data[0]['svcs'][3]['fid'])
+    else:
+        print("Could not fetch cluster info\n", file=sys.stderr)
+        return -1
+    print (local_endpoint, ha_endpoint, profile_fid, process_fid)
+    return ret
+
+def run_command(command):
+    global process
+    process = subprocess.Popen(shlex.split(command), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    while True:
+        output = process.stdout.readline()
+        if output == '' and process.poll() is not None:
+            break
+        if output:
+            #print(output.strip())
+            #print(output)
+            fid = "fid"
+            record = output.decode("utf-8")
+            if fid in record:
+               json_parser(record)
+    rc = process.poll()
+    return rc
+
+get_cluster_info();
+signal.signal(signal.SIGINT, signal_handler)
+run_command(get_m0sched_cmd())
