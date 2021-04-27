@@ -1,37 +1,44 @@
-This document contains information about m0sched binary. 
+This document contains information about m0scheduler python3 script. 
+
+**m0scheduler** responsible for,
+
+- getting **m0sched** parameters from Hare
+- runnning **m0sched** and attaches to it's stdin and stdout
+- getting **m0sched** stdout and parses JSONs produced by **m0sched**
+- caching all kv pairs received from **m0sched** in memory and deduplication newly received kv pairs
+- sending signals SIGINT and SIGTERM to **m0sched** and waits for its termination.
 
 ***************
 Build
 ***************
 
-- Setup motr/hare cluster with help of Hare User Guide. Ref - https://github.com/Seagate/cortx-hare/blob/c0ff88671c16c49de1cca81f6d06af180113e72b/README.md
+- Setup **rpm** based motr/hare cluster with help of Hare User Guide. Ref - https://github.com/Seagate/cortx-hare/blob/c0ff88671c16c49de1cca81f6d06af180113e72b/README.md
 
-- Once you setup motr/hare cluster, m0sched binary will be available for use. **m0sched** location: fdmi/plugins/m0sched
+- Once you setup **rpm** based motr/hare cluster, m0scheduler script will be available for use. **m0scheduler** source location: fdmi/plugins/m0scheduler. 
 
 ***************
 Exceution
 ***************
 
-- **m0sched** takes 4 params as command line options, local endpoint address, ha address, profile and process fid, to get these details check **hctl status**.
+- **m0scheduler** executes **m0sched** internally by passing required params as local ep, ha ep, profile fid and process fid, script will figure out required m0sched input params based on cluster setup.  (**Note:** script always pass first m0d instance ep and fid to m0sched as a local ep and process fid) 
 
-    ::
+::
 
-    hctl status
+    m0sched -i
+    m0sched -?
 
-- execute **m0sched** with expected commandline options, **m0sched** with option **-?** and **-i** will give you help details.
 
-    ::
-    
-    m0sched -l 192.168.52.53@tcp:12345:4:1 -h 192.168.52.53@tcp:12345:1:1 -p 0x7000000000000001:0x37 -f 0x7200000000000001:0x19
 
-- execute **m0crate** with dix put workload config file
+- execute **m0scheduler**, it will wait for fdmi source data to receive.
+
+::
+
+    m0scheduler
+
+
+- execute **m0crate** with dix put and get workload config file
 
     ::
 
     mcrate -S /tmp/m0crate-index.yaml
 
-- Now you can check fol record received at plugin application side ie **m0sched** at /tmp location with file name fol_rec_m0sched*
-
-    ::
-
-    ls -l /tmp/fol_rec_m0sched*
