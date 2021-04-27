@@ -25,7 +25,7 @@ import sys
 import json
 import ast
 
-kv_records = []
+kv_records = [] #global kv cache
 def json_parser(kv_record):
 	kvs = json.loads(kv_record)
 	#print (kvs["fid"])

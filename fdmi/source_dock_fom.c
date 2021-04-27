@@ -30,6 +30,7 @@
 #include "fdmi/source_dock.h"
 #include "fdmi/source_dock_internal.h"
 #include "fdmi/fops.h"
+#include "cas/cas.h"	/* struct m0_cas_op */
 
 static void fdmi_sd_fom_fini(struct m0_fom *fom);
 static int fdmi_sd_fom_tick(struct m0_fom *fom);
@@ -283,7 +284,47 @@ static size_t fdmi_sd_fom_locality(const struct m0_fom *fom)
 {
 	return 1;
 }
+struct m0_fom *global_fdmi_post_fom;
+static bool simple_filter()
+{
+	int                 i;
+	bool 		    flag = true;
 
+	if (global_fdmi_post_fom == NULL) {
+		flag = false;
+		goto final;
+	}
+
+	struct m0_fop	   *fop		    = global_fdmi_post_fom->fo_fop;
+	//M0_LOG(M0_DEBUG, "fom: %p fop: %p\n", fom, fop);
+	if (fop == NULL) {
+		flag = false;
+		goto final;
+	}
+
+	struct m0_cas_op   *op      	    = m0_fop_data(fop);
+	//M0_LOG(M0_DEBUG, "ca_op: %p\n", op);
+	struct m0_cas_rec  *cr_rec     	    = NULL;
+	const char 	   *key_pattern	    = "AAAAAAAA";
+
+	if (op == NULL) {
+		flag = false;
+		goto final;
+	}
+	//M0_LOG(M0_DEBUG, "op->cg_rec.cr_nr: %lu\n", op->cg_rec.cr_nr);
+	for (i = 0; i < op->cg_rec.cr_nr; i++) {
+		cr_rec = &op->cg_rec.cr_rec[i];
+		//M0_LOG(M0_DEBUG, "cr_rec: %p\n", cr_rec);
+		//M0_LOG(M0_DEBUG, "b_addr: %s key_pattern: %s\n", (char *)cr_rec->cr_key.u.ab_buf.b_addr, key_pattern);
+		if(strstr((const char *)cr_rec->cr_key.u.ab_buf.b_addr, key_pattern) == NULL) {
+			flag = false;
+			goto final;
+		}
+	}
+	final:
+		global_fdmi_post_fom = NULL;
+		return flag;
+}
 static int apply_filters(struct fdmi_sd_fom     *sd_fom,
 			 struct m0_fdmi_src_rec *src_rec)
 {
@@ -293,7 +334,7 @@ static int apply_filters(struct fdmi_sd_fom     *sd_fom,
 	int                         matched;
 	int                         rc = 0;
 	int                         ret;
-
+	bool                        is_filter = simple_filter();
 	M0_ENTRY("sd_fom %p, src_rec %p", sd_fom, src_rec);
 	M0_PRE(m0_fdmi__record_is_valid(src_rec));
 
@@ -303,7 +344,7 @@ static int apply_filters(struct fdmi_sd_fom     *sd_fom,
 		ret = filterc->fcc_ops->fco_get_next(&sd_fom->fsf_filter_iter,
 						     &fdmi_filter);
 		m0_fom_block_leave(fom);
-		if (ret > 0) {
+		if (ret > 0 && is_filter) {
 			matched = fdmi_filter_calc(sd_fom, src_rec,
 						   fdmi_filter);
 			src_rec->fsr_matched = (matched > 0);

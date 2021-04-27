@@ -185,6 +185,8 @@ static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
 	struct m0_fdmi_flt_node    *root;
 	//struct m0_buf               var = M0_BUF_INITS("hardcode");
 	static bool		   first_filter = true;
+	 M0_ENTRY("first_filter %d", first_filter);
+	/*
 	static int count = 0;
 	M0_ENTRY("count %d", count);
 	if (count < 9) {
@@ -192,7 +194,7 @@ static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
 		*out = NULL;
 		return 0;
 	}
-
+	*/
 	if (first_filter) {
 		root = m0_fdmi_flt_op_node_create(
 			M0_FFO_OR,
