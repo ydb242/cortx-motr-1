@@ -301,6 +301,13 @@ struct m0_cas_op {
 	 * It's a bitmask of flags from m0_cas_op_flags enumeration.
 	 */
 	uint32_t           cg_flags;
+
+	/**
+	 * CAS operation opcode
+	 *
+	 * for more details see enum m0_cas_opcode.
+	 */
+	int32_t		 cg_opcode M0_XCA_FENUM(m0_cas_opcode);
 } M0_XCA_RECORD M0_XCA_DOMAIN(rpc);
 
 /**

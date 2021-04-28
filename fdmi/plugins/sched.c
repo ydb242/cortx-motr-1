@@ -265,22 +265,32 @@ M0_INTERNAL void m0_dump_m0_fol_rec_to_json(struct m0_fol_rec *rec)
 		struct m0_cas_recv cg_rec = cas_op->cg_rec;
 		struct m0_cas_rec *cr_rec = cg_rec.cr_rec;
 
+		m0_console_printf("cas op opcode: %d\n", cas_op->cg_opcode);
 		for (i = 0; i < cg_rec.cr_nr; i++) {
 			char *buffer = NULL;
+			int len = 0;
 
 			m0_console_printf("{ ");
 
-			buffer = to_hex(&cas_op->cg_id.ci_fid, sizeof(struct m0_fid), buffer);
+			len = sizeof(struct m0_fid);
+			buffer = to_hex(&cas_op->cg_id.ci_fid, len, buffer);
 			m0_console_printf("\"fid\": \"%s\", ", buffer);
 			free(buffer);
 
-			buffer = to_hex(cr_rec[i].cr_key.u.ab_buf.b_addr, cr_rec[i].cr_key.u.ab_buf.b_nob, buffer);
+			len = cr_rec[i].cr_key.u.ab_buf.b_nob;
+			buffer = to_hex(cr_rec[i].cr_key.u.ab_buf.b_addr, len, buffer);
 			m0_console_printf("\"cr_key\": \"%s\", ", buffer);
 			free(buffer);
 
-			buffer = to_hex(cr_rec[i].cr_val.u.ab_buf.b_addr, cr_rec[i].cr_val.u.ab_buf.b_nob, buffer);
+			len = cr_rec[i].cr_val.u.ab_buf.b_nob;
+			if (len > 0) {
+				buffer = to_hex(cr_rec[i].cr_val.u.ab_buf.b_addr, len, buffer);
+			} else {
+				buffer = "0";
+			}
 			m0_console_printf("\"cr_val\": \"%s\"", buffer);
-			free(buffer);
+			if (len > 0)
+				free(buffer);
 			m0_console_printf(" }\n");
 
 		}

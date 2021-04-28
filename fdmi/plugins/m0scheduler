@@ -34,13 +34,13 @@ def json_parser(kv_record):
 	kv = {'fid': kvs["fid"], 'cr_key': kvs["cr_key"], 'cr_val': kvs["cr_val"]}
 	flag =  True
 	for kv_i in kv_records:
-		if kv['cr_key'] == kv_i['cr_key']:
+		if kv['cr_key'] == kv_i['cr_key'] and kv['cr_val'] != '0':
 			#print(kv_records)
 			print("dedup: ", kv_i, kv)
 			flag = False
 			break
 
-	if flag == True:
+	if flag == True and kv['cr_val'] != '0':
 		kv_records.append(kv)
 
 def signal_handler(sig, frame):

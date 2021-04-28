@@ -284,46 +284,40 @@ static size_t fdmi_sd_fom_locality(const struct m0_fom *fom)
 {
 	return 1;
 }
-struct m0_fom *global_fdmi_post_fom;
-static bool simple_filter()
+
+static bool is_simple_filter(struct m0_fdmi_src_rec *src_rec)
 {
-	int                 i;
-	bool 		    flag = true;
+	int i;
+	struct m0_fol_rec *fol_rec;
+	struct m0_fol_frag     *frag;
 
-	if (global_fdmi_post_fom == NULL) {
-		flag = false;
-		goto final;
-	}
+	bool is_filter		  = true;
+	const char *match_pattern = "AAAAAAAA";
 
-	struct m0_fop	   *fop		    = global_fdmi_post_fom->fo_fop;
-	//M0_LOG(M0_DEBUG, "fom: %p fop: %p\n", fom, fop);
-	if (fop == NULL) {
-		flag = false;
-		goto final;
-	}
+	fol_rec = container_of(src_rec, struct m0_fol_rec, fr_fdmi_rec);
+	m0_tl_for(m0_rec_frag, &fol_rec->fr_frags, frag) {
 
-	struct m0_cas_op   *op      	    = m0_fop_data(fop);
-	//M0_LOG(M0_DEBUG, "ca_op: %p\n", op);
-	struct m0_cas_rec  *cr_rec     	    = NULL;
-	const char 	   *key_pattern	    = "AAAAAAAA";
+		struct m0_fop_fol_frag *fp_frag = frag->rp_data;
+		struct m0_cas_op *cas_op = fp_frag->ffrp_fop;
 
-	if (op == NULL) {
-		flag = false;
-		goto final;
-	}
-	//M0_LOG(M0_DEBUG, "op->cg_rec.cr_nr: %lu\n", op->cg_rec.cr_nr);
-	for (i = 0; i < op->cg_rec.cr_nr; i++) {
-		cr_rec = &op->cg_rec.cr_rec[i];
-		//M0_LOG(M0_DEBUG, "cr_rec: %p\n", cr_rec);
-		//M0_LOG(M0_DEBUG, "b_addr: %s key_pattern: %s\n", (char *)cr_rec->cr_key.u.ab_buf.b_addr, key_pattern);
-		if(strstr((const char *)cr_rec->cr_key.u.ab_buf.b_addr, key_pattern) == NULL) {
-			flag = false;
-			goto final;
+		M0_LOG(M0_DEBUG, "cas op: %p opcode: %d\n", cas_op, cas_op->cg_opcode);
+		if (cas_op == NULL) {
+			is_filter = false;
+			goto fini;
 		}
-	}
-	final:
-		global_fdmi_post_fom = NULL;
-		return flag;
+
+		for (i = 0; i < cas_op->cg_rec.cr_nr; i++) {
+			struct m0_cas_rec *cr_rec = &cas_op->cg_rec.cr_rec[i];
+			if(strstr((const char *)cr_rec->cr_key.u.ab_buf.b_addr, match_pattern) == NULL) {
+				is_filter = false;
+				goto fini;
+			}
+
+		}
+	} m0_tl_endfor;
+
+	fini:
+		return is_filter;
 }
 static int apply_filters(struct fdmi_sd_fom     *sd_fom,
 			 struct m0_fdmi_src_rec *src_rec)
@@ -334,9 +328,10 @@ static int apply_filters(struct fdmi_sd_fom     *sd_fom,
 	int                         matched;
 	int                         rc = 0;
 	int                         ret;
-	bool                        is_filter = simple_filter();
 	M0_ENTRY("sd_fom %p, src_rec %p", sd_fom, src_rec);
 	M0_PRE(m0_fdmi__record_is_valid(src_rec));
+
+	bool                        is_filter = is_simple_filter(src_rec);
 
 	do {
 		/* @todo fco_get_next shouldn't block (phase 2) */

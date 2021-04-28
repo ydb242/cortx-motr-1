@@ -1110,6 +1110,7 @@ static int cas_fom_tick(struct m0_fom *fom0)
 	bool                do_ctidx;
 	int                 next_phase;
 
+	op->cg_opcode = opc;
 	M0_ENTRY("fom %p phase %d", fom, phase);
 	is_index_drop = op_is_index_drop(opc, ct);
 	M0_PRE(ctidx != NULL);

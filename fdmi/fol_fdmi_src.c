@@ -541,8 +541,6 @@ M0_INTERNAL int m0_fol_fdmi_src_deinit(void)
  * Entry point for FOM to start FDMI processing
  * ------------------------------------------------------------------ */
 
-extern struct m0_fom *global_fdmi_post_fom;
-
 M0_INTERNAL int m0_fol_fdmi_post_record(struct m0_fom *fom)
 {
 	struct m0_fdmi_module *m = m0_fdmi_module__get();
@@ -551,7 +549,6 @@ M0_INTERNAL int m0_fol_fdmi_post_record(struct m0_fom *fom)
 	int                    rc;
 
 	M0_ENTRY("fom: %p", fom);
-	global_fdmi_post_fom = fom;
 
 	M0_ASSERT(fom != NULL);
 	M0_ASSERT(m->fdm_s.fdms_ffs_ctx.ffsc_src->fs_record_post != NULL);
