@@ -285,6 +285,24 @@ static size_t fdmi_sd_fom_locality(const struct m0_fom *fom)
 	return 1;
 }
 
+/* simple pattern match for s3 object based on object schema */
+static bool is_val_pattern_found(const char *val) {
+
+    if (strstr(val, "Object-URI") == NULL || strstr(val, "Part-One-Size"))
+        return false;
+
+    return true;
+}
+
+/* simple pattern match for m0crate kv workload based on key pattern */
+static bool is_key_pattern_found(const char *key) {
+
+    if (strstr(key, "AAAAAAAA") == NULL)
+        return false;
+
+    return true;
+}
+
 static bool is_simple_filter(struct m0_fdmi_src_rec *src_rec)
 {
 	int i;
@@ -292,7 +310,7 @@ static bool is_simple_filter(struct m0_fdmi_src_rec *src_rec)
 	struct m0_fol_frag     *frag;
 
 	bool is_filter		  = true;
-	const char *match_pattern = "AAAAAAAA";
+	bool disable		  = false;
 
 	fol_rec = container_of(src_rec, struct m0_fol_rec, fr_fdmi_rec);
 	m0_tl_for(m0_rec_frag, &fol_rec->fr_frags, frag) {
@@ -308,7 +326,18 @@ static bool is_simple_filter(struct m0_fdmi_src_rec *src_rec)
 
 		for (i = 0; i < cas_op->cg_rec.cr_nr; i++) {
 			struct m0_cas_rec *cr_rec = &cas_op->cg_rec.cr_rec[i];
-			if(strstr((const char *)cr_rec->cr_key.u.ab_buf.b_addr, match_pattern) == NULL) {
+			const char *key = cr_rec->cr_key.u.ab_buf.b_addr;
+			const char *val = cr_rec->cr_val.u.ab_buf.b_addr;
+
+			int klen = cr_rec->cr_key.u.ab_buf.b_nob;
+			int vlen = cr_rec->cr_val.u.ab_buf.b_nob;
+
+			if(/*disable && */ klen && is_key_pattern_found(key) == false ) {
+				is_filter = false;
+				goto fini;
+			}
+
+			if (disable && vlen && is_val_pattern_found(val) == false) {
 				is_filter = false;
 				goto fini;
 			}

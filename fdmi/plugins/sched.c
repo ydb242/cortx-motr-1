@@ -236,12 +236,11 @@ M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 	M0_LEAVE("fol rec ptr=%p\n", rec);
 }
 */
-
-M0_INTERNAL char *to_hex(void *addr, int len, char *buffer)
+M0_INTERNAL char *to_hex(void *addr, int len)
 {
 	int i;
 	int j;
-	buffer = (char *)malloc(len*2);
+	char *buffer = (char *)malloc(len*2);
 	bzero(buffer, len);
 	if ( buffer == NULL ) {
 		m0_console_printf( "malloc failed\n");
@@ -249,8 +248,30 @@ M0_INTERNAL char *to_hex(void *addr, int len, char *buffer)
 	for(i = 0, j = 0; i < (2 * len) && j < len; ++j) {
 		i += sprintf(buffer + i, "%02x", ((char *)addr)[j]);
 	}
+	buffer[2 * len - 2] = '\0';
 	return buffer;
 }
+/*
+const char hexmap[] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                           '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+char *to_hex(char *addr, int len)
+{
+	int i;
+    char *buffer = (char *) malloc(2 * len);
+	if (buffer == NULL) {
+		m0_console_printf( "malloc failed\n");
+		return NULL;
+	}
+    //bzero(buffer, 2*len);
+	for (i = 0; i < len; ++i) {
+		buffer[2 * i]     = hexmap[(addr[i] & 0xF0) >> 4];
+		buffer[2 * i + 1] = hexmap[addr[i] & 0x0F];
+	}
+	buffer[2 * len - 2] = '\0';
+	m0_console_printf(" 2 * i: %d len: %d\n", 2 * i, len);
+	return buffer;
+}
+*/
 
 M0_INTERNAL void m0_dump_m0_fol_rec_to_json(struct m0_fol_rec *rec)
 {
@@ -273,18 +294,18 @@ M0_INTERNAL void m0_dump_m0_fol_rec_to_json(struct m0_fol_rec *rec)
 			m0_console_printf("{ ");
 
 			len = sizeof(struct m0_fid);
-			buffer = to_hex(&cas_op->cg_id.ci_fid, len, buffer);
+			buffer = to_hex((void *)&cas_op->cg_id.ci_fid, len);
 			m0_console_printf("\"fid\": \"%s\", ", buffer);
 			free(buffer);
 
 			len = cr_rec[i].cr_key.u.ab_buf.b_nob;
-			buffer = to_hex(cr_rec[i].cr_key.u.ab_buf.b_addr, len, buffer);
+			buffer = to_hex(cr_rec[i].cr_key.u.ab_buf.b_addr, len);
 			m0_console_printf("\"cr_key\": \"%s\", ", buffer);
 			free(buffer);
 
 			len = cr_rec[i].cr_val.u.ab_buf.b_nob;
 			if (len > 0) {
-				buffer = to_hex(cr_rec[i].cr_val.u.ab_buf.b_addr, len, buffer);
+				buffer = to_hex(cr_rec[i].cr_val.u.ab_buf.b_addr, len);
 			} else {
 				buffer = "0";
 			}

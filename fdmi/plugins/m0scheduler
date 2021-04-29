@@ -24,23 +24,28 @@ import shlex
 import sys
 import json
 import ast
+import codecs
 
 kv_records = [] #global kv cache
+def str_decode(encoded):
+	if encoded == "0" :
+		return encoded;
+	return codecs.decode(encoded, 'hex').decode('utf-8')
 def json_parser(kv_record):
 	kvs = json.loads(kv_record)
 	#print (kvs["fid"])
-	#print (kvs["cr_key"])
-	#print (kvs["cr_val"])
-	kv = {'fid': kvs["fid"], 'cr_key': kvs["cr_key"], 'cr_val': kvs["cr_val"]}
+	#print ("cr_key: ", str_decode(kvs["cr_key"]))
+	kv = {'fid': str_decode(kvs["fid"]), 'cr_key': str_decode(kvs["cr_key"]), 'cr_val': str_decode(kvs["cr_val"])}
+	#kv = {'fid': kvs["fid"], 'cr_key': kvs["cr_key"], 'cr_val': kvs["cr_val"]}
 	flag =  True
 	for kv_i in kv_records:
-		if kv['cr_key'] == kv_i['cr_key'] and kv['cr_val'] != '0':
+		if kv['cr_key'] == kv_i['cr_key'] and kv['cr_val'] != "0":
 			#print(kv_records)
 			print("dedup: ", kv_i, kv)
 			flag = False
 			break
 
-	if flag == True and kv['cr_val'] != '0':
+	if flag == True and kv['cr_val'] != "0":
 		kv_records.append(kv)
 
 def signal_handler(sig, frame):
@@ -103,6 +108,7 @@ def run_command(command):
             #print(output)
             fid = "fid"
             record = output.decode("utf-8")
+            #record = output.decode("hex")
             if fid in record:
                json_parser(record)
     rc = process.poll()
