@@ -332,7 +332,7 @@ static bool is_simple_filter(struct m0_fdmi_src_rec *src_rec)
 			int klen = cr_rec->cr_key.u.ab_buf.b_nob;
 			int vlen = cr_rec->cr_val.u.ab_buf.b_nob;
 
-			if(/*disable && */ klen && is_key_pattern_found(key) == false ) {
+			if(/*disable &&*/ klen && is_key_pattern_found(key) == false) {
 				is_filter = false;
 				goto fini;
 			}

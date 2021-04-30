@@ -27,17 +27,19 @@ import ast
 import codecs
 
 kv_records = [] #global kv cache
+
 def str_decode(encoded):
 	if encoded == "0" :
 		return encoded;
 	return codecs.decode(encoded, 'hex').decode('utf-8')
+
 def json_parser(kv_record):
 	kvs = json.loads(kv_record)
-	#print (kvs["fid"])
-	#print ("cr_key: ", str_decode(kvs["cr_key"]))
 	kv = {'fid': str_decode(kvs["fid"]), 'cr_key': str_decode(kvs["cr_key"]), 'cr_val': str_decode(kvs["cr_val"])}
 	#kv = {'fid': kvs["fid"], 'cr_key': kvs["cr_key"], 'cr_val': kvs["cr_val"]}
 	flag =  True
+
+	#check dedup records
 	for kv_i in kv_records:
 		if kv['cr_key'] == kv_i['cr_key'] and kv['cr_val'] != "0":
 			#print(kv_records)
@@ -45,15 +47,18 @@ def json_parser(kv_record):
 			flag = False
 			break
 
+	#if  record is not dedupable, add to cache
 	if flag == True and kv['cr_val'] != "0":
 		kv_records.append(kv)
 
+#handle SIGNT and SIGTERM
 def signal_handler(sig, frame):
 	print("CTRL + C pressed")
 	process.send_signal(sig)
 	process.wait()
 	print(kv_records)
 	sys.exit(0)
+
 def execute_command_and_get_output(cmd):
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE,
@@ -64,12 +69,14 @@ def execute_command_and_get_output(cmd):
     return output_var
 
 
+#m0sched -l 192.168.52.53@tcp:12345:4:1 -h 192.168.52.53@tcp:12345:1:1 -p 0x7000000000000001:0x37 -f 0x7200000000000001:0x19
 def get_m0sched_cmd():
 	#m0sched = "/home/931442/cortx-motr/fdmi/plugins/m0sched"
 	m0sched = "m0sched"
-	#opts = " -l 192.168.52.53@tcp:12345:4:1 -h 192.168.52.53@tcp:12345:1:1 -p 0x7000000000000001:0x37 -f 0x7200000000000001:0x19"
 	opts = " -l " + local_endpoint + " -h " + ha_endpoint + " -p " + profile_fid + " -f " + process_fid
 	return m0sched + opts
+
+#get local ep, ha ep, profile fid and process fid
 def get_cluster_info():
     ret = 0
     global profile_fid
@@ -82,11 +89,6 @@ def get_cluster_info():
     if (cluster_info != None):
         profile_fid = str(cluster_js["profiles"][0]["fid"])
         nodes_data = cluster_js["nodes"]
-        #print("nodes_data: ", nodes_data[0]['svcs'][0]['ep']) #hax
-        #print("nodes_data: ", nodes_data[0]['svcs'][1]['ep']) #cond
-        #print("nodes_data: ", nodes_data[0]['svcs'][2]['ep']) #ios
-        #print("nodes_data: ", nodes_data[0]['svcs'][3]['ep']) #m01
-        #print("nodes_data: ", nodes_data[0]['svcs'][4]['ep']) #m02
         ha_endpoint = str(nodes_data[0]['svcs'][0]['ep'])
         local_endpoint = str(nodes_data[0]['svcs'][3]['ep'])
         process_fid = str(nodes_data[0]['svcs'][3]['fid'])
@@ -98,22 +100,28 @@ def get_cluster_info():
 
 def run_command(command):
     global process
-    process = subprocess.Popen(shlex.split(command), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(shlex.split(command), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     while True:
         output = process.stdout.readline()
-        if output == '' and process.poll() is not None:
-            break
+
         if output:
-            #print(output.strip())
-            #print(output)
             fid = "fid"
             record = output.decode("utf-8")
-            #record = output.decode("hex")
             if fid in record:
                json_parser(record)
+
+        if process.poll() is not None:
+            print("Exiting because m0sched exited");
+            break
+
     rc = process.poll()
     return rc
 
-get_cluster_info();
+
+#register signal handler
 signal.signal(signal.SIGINT, signal_handler)
+
+get_cluster_info();
+
+#execute m0sched
 run_command(get_m0sched_cmd())
