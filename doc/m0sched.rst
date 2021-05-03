@@ -17,7 +17,7 @@ Build
 - Once you setup **rpm** based motr/hare cluster, m0scheduler script will be available for use. **m0scheduler** source location: fdmi/plugins/m0scheduler. 
 
 ***************
-Exceution
+Execution
 ***************
 
 - **m0scheduler** executes **m0sched** internally by passing required params as local ep, ha ep, profile fid and process fid, script will figure out required m0sched input params based on cluster setup.  (**Note:** script always pass first m0d instance ep and fid to m0sched as a local ep and process fid) 

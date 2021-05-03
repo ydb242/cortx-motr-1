@@ -49,6 +49,7 @@ def json_parser(kv_record):
 
 	#if  record is not dedupable, add to cache
 	if flag == True and kv['cr_val'] != "0":
+		print("new kv: ", kv)
 		kv_records.append(kv)
 
 #handle SIGNT and SIGTERM
@@ -56,7 +57,7 @@ def signal_handler(sig, frame):
 	print("CTRL + C pressed")
 	process.send_signal(sig)
 	process.wait()
-	print(kv_records)
+	#print(kv_records)
 	sys.exit(0)
 
 def execute_command_and_get_output(cmd):
