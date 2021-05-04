@@ -176,6 +176,36 @@ static struct m0_fid CLASSIFY_PLUGIN_FID = {
     .f_container = M0_FDMI_REC_TYPE_FOL,
     .f_key = 0x1
 };
+
+#include <unistd.h>
+#include <fcntl.h>
+
+#define FDMI_PLUGIN_EP "/etc/fdmi_plugin_ep"
+#define FDMI_PLUGIN_EP_LEN 29
+char fdmi_plugin_ep[FDMI_PLUGIN_EP_LEN];
+
+static void read_plugin_endpoint() {
+        int fd;
+        int rc;
+        fd = open(FDMI_PLUGIN_EP, O_RDONLY, 0444);
+        if (fd < 0) {
+                M0_LOG(M0_ERROR, "read_plugin_endpoint\n");
+                return;
+        }
+
+        //strlen("192.168.52.53@tcp:12345:4:1") == 27
+        rc = read(fd, fdmi_plugin_ep, FDMI_PLUGIN_EP_LEN-2);
+        if (rc < 0) {
+                M0_LOG(M0_ERROR, "read failed in write_plugin_endpoint\n");
+                return;
+        }
+
+	fdmi_plugin_ep[FDMI_PLUGIN_EP_LEN - 1] = '\0';
+        //M0_LOG(M0_LOG, "read_plugin_endpoint: %s\n", fdmi_plugin_ep);
+        close(fd);
+}
+
+
 static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
 				       struct m0_conf_fdmi_filter **out)
 {
@@ -196,6 +226,8 @@ static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
 	}
 	*/
 	if (first_filter) {
+		read_plugin_endpoint();
+
 		root = m0_fdmi_flt_op_node_create(
 			M0_FFO_OR,
 			m0_fdmi_flt_bool_node_create(true),
@@ -208,7 +240,7 @@ static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
 
 		M0_ALLOC_ARR(conf_flt->ff_endpoints, 1);
 		//conf_flt->ff_endpoints[0] = g_rpc_env.ep_addr_remote;
-		conf_flt->ff_endpoints[0] = "192.168.52.53@tcp:12345:4:1";
+		conf_flt->ff_endpoints[0] = fdmi_plugin_ep;
 		conf_flt->ff_filter_id = CLASSIFY_PLUGIN_FID;
 		*out = conf_flt;
 		rc = 1;

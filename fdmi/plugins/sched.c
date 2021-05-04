@@ -465,6 +465,30 @@ static void deinit_plugin()
 	pdo->fpo_deregister_plugin(&CLASSIFY_PLUGIN_FID, 1);
 
 }
+
+#include <unistd.h>
+#include <fcntl.h>
+
+#define FDMI_PLUGIN_EP "/etc/fdmi_plugin_ep"
+
+static void write_plugin_endpoint(char *fdmi_plugin_ep) {
+    int fd;
+    int rc;
+    fd = open(FDMI_PLUGIN_EP, O_CREAT | O_WRONLY, 0666);
+    if (fd < 0) {
+        m0_console_printf("open failed in write_plugin_endpoint\n");
+        return;
+    }
+
+    rc = write(fd, fdmi_plugin_ep, strlen(fdmi_plugin_ep));
+    if (rc < 0) {
+        m0_console_printf("write failed in write_plugin_endpoint\n");
+        return;
+    }
+    m0_console_printf("%s written to %s\n", fdmi_plugin_ep, FDMI_PLUGIN_EP);
+    close(fd);
+}
+
 static int sched_init(struct sched_conf *conf)
 {
 	int rc;
@@ -481,6 +505,8 @@ static int sched_init(struct sched_conf *conf)
 
 	dix_conf.kc_create_meta 	 = false;
 	m0_conf.mc_idx_service_conf 	 = &dix_conf;
+
+	write_plugin_endpoint(conf->local_addr);
 
 	/* Client instance */
 	rc = m0_client_init(&m0c, &m0_conf, true);

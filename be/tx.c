@@ -633,6 +633,8 @@ M0_INTERNAL bool m0_be_tx__is_fast(struct m0_be_tx *tx)
 {
 	return tx->t_fast;
 }
+
+#include "rpc/rpc_opcodes.h"
 M0_INTERNAL void m0_save_m0_xcode_type(int fd, char tab[], const struct m0_xcode_type *xf_type)
 {
 	int rc;
@@ -772,6 +774,8 @@ M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 		rc = write(fd, buffer, strlen(buffer));
 		sprintf(buffer, "\t\t\t\tffrp_rep_code: %d\n", fp_frag->ffrp_rep_code);
 		rc = write(fd, buffer, strlen(buffer));
+		if (fp_frag->ffrp_fop_code != M0_CAS_PUT_FOP_OPCODE)
+			return;
 
 		//struct m0_xcode_obj obj = {
 			//.xo_type = m0_fop_fol_frag_xc,
@@ -794,7 +798,7 @@ M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 		sprintf(buffer, "\t\t\t\t\t\tcr_nr: %lu\n", cas_op->cg_rec.cr_nr);
 		rc = write(fd, buffer, strlen(buffer));
 		int i=0;
-		for (i = 0; i < cas_op->cg_rec.cr_nr; i++) {
+		for (i = 0; i < cas_op->cg_rec.cr_nr && cas_op->cg_rec.cr_nr < 8; i++) {
 			sprintf(buffer, "\n\t\t\t\t\t\tcr_key: %lu bytes ", cas_op->cg_rec.cr_rec[i].cr_key.u.ab_buf.b_nob);
 			rc = write(fd, buffer, strlen(buffer));
 			rc = write(fd, cas_op->cg_rec.cr_rec[i].cr_key.u.ab_buf.b_addr,
