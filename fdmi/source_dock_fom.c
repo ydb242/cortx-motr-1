@@ -324,6 +324,12 @@ static bool is_simple_filter(struct m0_fdmi_src_rec *src_rec)
 			goto fini;
 		}
 
+		if (fp_frag->ffrp_fop_code != M0_CAS_PUT_FOP_OPCODE || cas_op->cg_rec.cr_nr > 8) {
+			M0_LOG(M0_DEBUG, "cas op: %p cr_nr: %lu\n", cas_op, cas_op->cg_rec.cr_nr);
+			is_filter = false;
+			goto fini;
+		}
+
 		for (i = 0; i < cas_op->cg_rec.cr_nr; i++) {
 			struct m0_cas_rec *cr_rec = &cas_op->cg_rec.cr_rec[i];
 			const char *key = cr_rec->cr_key.u.ab_buf.b_addr;
