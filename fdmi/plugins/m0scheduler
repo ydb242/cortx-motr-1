@@ -90,13 +90,19 @@ def get_cluster_info():
     if (cluster_info != None):
         profile_fid = str(cluster_js["profiles"][0]["fid"])
         nodes_data = cluster_js["nodes"]
-        ha_endpoint = str(nodes_data[0]['svcs'][0]['ep'])
-        local_endpoint = str(nodes_data[0]['svcs'][3]['ep'])
-        process_fid = str(nodes_data[0]['svcs'][3]['fid'])
+        for svcs in nodes_data[0]['svcs']:
+            if svcs['name'] == 'hax':
+                ha_endpoint = str(svcs['ep'])
+
+            #m0sched alway uses first m0client
+            if svcs['name'] == 'm0_client':
+                local_endpoint = str(svcs['ep'])
+                process_fid = str(svcs['fid'])
+                break
     else:
         print("Could not fetch cluster info\n", file=sys.stderr)
         return -1
-    print (local_endpoint, ha_endpoint, profile_fid, process_fid)
+    print ("local:", local_endpoint," ha:", ha_endpoint, "prof: ", profile_fid, "proc:", process_fid)
     return ret
 
 def run_command(command):
