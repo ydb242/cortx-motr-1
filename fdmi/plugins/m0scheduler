@@ -31,7 +31,8 @@ kv_records = [] #global kv cache
 def str_decode(encoded):
 	if encoded == "0" :
 		return encoded;
-	return codecs.decode(encoded, 'hex').decode('utf-8')
+	#return codecs.decode(encoded, 'hex').decode('utf-8')
+	return codecs.decode(encoded, 'hex')
 
 def json_parser(kv_record):
 	kvs = json.loads(kv_record)

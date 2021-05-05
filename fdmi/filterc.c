@@ -201,7 +201,6 @@ static void read_plugin_endpoint() {
         }
 
 	fdmi_plugin_ep[FDMI_PLUGIN_EP_LEN - 1] = '\0';
-        M0_LOG(M0_DEBUG, "read_plugin_endpoint: \"%s\"\n", (const char *)fdmi_plugin_ep);
         close(fd);
 }
 
@@ -224,6 +223,7 @@ static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
 		return 0;
 	}
 	*/
+        M0_ENTRY( "read_plugin_endpoint: \"%s\"\n", (const char *)fdmi_plugin_ep);
 	if (first_filter) {
 		read_plugin_endpoint();
 
@@ -239,8 +239,8 @@ static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
 
 		M0_ALLOC_ARR(conf_flt->ff_endpoints, 1);
 		//conf_flt->ff_endpoints[0] = g_rpc_env.ep_addr_remote;
-		conf_flt->ff_endpoints[0] = "10.230.243.235@tcp:12345:4:1";
-		//conf_flt->ff_endpoints[0] = fdmi_plugin_ep;
+		//conf_flt->ff_endpoints[0] = "10.230.243.235@tcp:12345:4:1";
+		conf_flt->ff_endpoints[0] = fdmi_plugin_ep;
 		conf_flt->ff_filter_id = CLASSIFY_PLUGIN_FID;
 		*out = conf_flt;
 		rc = 1;
@@ -250,6 +250,7 @@ static int filterc_send_harcode_get_next(struct m0_filterc_iter      *iter,
 		rc = 0;
 		first_filter = true;
 	}
+        M0_LEAVE( "read_plugin_endpoint: \"%s\"\n", (const char *)fdmi_plugin_ep);
 	return rc;
 }
 static void m0_filterc_close(struct m0_filterc_iter *iter)
