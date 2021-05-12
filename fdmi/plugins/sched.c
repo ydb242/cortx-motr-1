@@ -236,14 +236,17 @@ M0_INTERNAL void m0_save_m0_fol_rec(struct m0_fol_rec *rec, const char *prefix)
 	M0_LEAVE("fol rec ptr=%p\n", rec);
 }
 */
+
+#define MAX_LEN 8192
+
+char buffer[MAX_LEN];
 M0_INTERNAL char *to_hex(void *addr, int len)
 {
 	int i;
 	int j;
-	char *buffer = (char *)malloc(len*2);
-	bzero(buffer, len);
-	if ( buffer == NULL ) {
-		m0_console_printf( "malloc failed\n");
+	if ((2 * len) > MAX_LEN) {
+		m0_console_printf( "to_hex() failed with (2 * len) > MAX_LEN\n");
+		return NULL;
 	}
 	for(i = 0, j = 0; i < (2 * len) && j < len; ++j) {
 		i += sprintf(buffer + i, "%02x", ((char *)addr)[j]);
@@ -288,30 +291,22 @@ M0_INTERNAL void m0_dump_m0_fol_rec_to_json(struct m0_fol_rec *rec)
 
 		m0_console_printf("cas op opcode: %d\n", cas_op->cg_opcode);
 		for (i = 0; i < cg_rec.cr_nr; i++) {
-			char *buffer = NULL;
 			int len = 0;
 
 			m0_console_printf("{ ");
 
 			len = sizeof(struct m0_fid);
-			buffer = to_hex((void *)&cas_op->cg_id.ci_fid, len);
-			m0_console_printf("\"fid\": \"%s\", ", buffer);
-			free(buffer);
+			m0_console_printf("\"fid\": \"%s\", ", to_hex((void *)&cas_op->cg_id.ci_fid, len));
 
 			len = cr_rec[i].cr_key.u.ab_buf.b_nob;
-			buffer = to_hex(cr_rec[i].cr_key.u.ab_buf.b_addr, len);
-			m0_console_printf("\"cr_key\": \"%s\", ", buffer);
-			free(buffer);
+			m0_console_printf("\"cr_key\": \"%s\", ", to_hex(cr_rec[i].cr_key.u.ab_buf.b_addr, len));
 
 			len = cr_rec[i].cr_val.u.ab_buf.b_nob;
 			if (len > 0) {
-				buffer = to_hex(cr_rec[i].cr_val.u.ab_buf.b_addr, len);
+				m0_console_printf("\"cr_val\": \"%s\"", to_hex(cr_rec[i].cr_val.u.ab_buf.b_addr, len));
 			} else {
-				buffer = "0";
+				m0_console_printf("\"cr_val\": \"0\"");
 			}
-			m0_console_printf("\"cr_val\": \"%s\"", buffer);
-			if (len > 0)
-				free(buffer);
 			m0_console_printf(" }\n");
 
 		}
