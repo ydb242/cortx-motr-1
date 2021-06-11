@@ -785,9 +785,6 @@ struct m0_client* st_get_instance()
 #include "dtm0/service.h"
 
 struct dtm0_ut_ctx {
-	struct m0_fid           duc_cli_svc_fid;
-	struct m0_fid           duc_srv_svc_fid;
-	struct m0_reqh_service *duc_srv_svc;
 	struct m0_idx           duc_idx;
 	struct m0_container     duc_realm;
 	struct m0_fid           duc_ifid;
@@ -797,13 +794,6 @@ static struct dtm0_ut_ctx duc = {};
 
 static int duc_setup(void)
 {
-	const char              *cl_ep_addr   = "0@lo:12345:34:2";
-	struct m0_fid            cli_srv_fid  = M0_FID_INIT(0x7300000000000001,
-							    0x1a);
-	struct m0_fid            srv_dtm0_fid = M0_FID_INIT(0x7300000000000001,
-							    0x1c);
-	struct m0_reqh_service  *srv_srv = NULL;
-	struct m0_reqh          *srv_reqh;
 	int                      rc;
 	struct m0_container     *realm = &duc.duc_realm;
 
@@ -814,21 +804,10 @@ static int duc_setup(void)
 	m0_container_init(realm, NULL, &M0_UBER_REALM, ut_m0c);
 
 	if (ENABLE_DTM0) {
-		/* Connect to the server */
 		M0_UT_ASSERT(ut_m0c->m0c_dtms != NULL);
-		srv_reqh = &dix_ut_sctx.rsx_motr_ctx.cc_reqh_ctx.rc_reqh;
-		srv_srv = m0_reqh_service_lookup(srv_reqh, &srv_dtm0_fid);
-		rc = m0_dtm0_service_process_connect(srv_srv, &cli_srv_fid,
-						     cl_ep_addr, false);
-		M0_UT_ASSERT(rc == 0);
 	}
 
 	general_ifid_fill(&duc.duc_ifid, true);
-
-	/* Save the context */
-	duc.duc_cli_svc_fid = cli_srv_fid;
-	duc.duc_srv_svc_fid = srv_dtm0_fid;
-	duc.duc_srv_svc = srv_srv;
 
 	return 0;
 }
@@ -874,15 +853,7 @@ static void idx_teardown(void)
 
 static int duc_teardown(void)
 {
-	struct m0_reqh_service  *srv_srv = duc.duc_srv_svc;
-	struct m0_fid            cli_srv_fid  = duc.duc_cli_svc_fid;
-	int                      rc;
-
-	if (ENABLE_DTM0) {
-		/* Disconnect from the server */
-		rc = m0_dtm0_service_process_disconnect(srv_srv, &cli_srv_fid);
-		M0_UT_ASSERT(rc == 0);
-	}
+	int rc;
 
 	rc = ut_suite_mt_idx_dix_fini();
 	m0_fi_disable("m0_dtm0_in_ut", "ut");

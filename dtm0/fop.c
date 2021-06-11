@@ -249,48 +249,13 @@ static int m0_dtm0_send_msg(struct m0_fom                *fom,
 			    const struct m0_fid          *tgt,
 			    const struct m0_dtm0_tx_desc *txd)
 {
-	struct m0_fop          *fop;
-	struct m0_rpc_session  *session;
-	struct m0_rpc_item     *item;
-	struct dtm0_req_fop    *req;
-	uint64_t                phase_sm_id;
-	uint64_t                rpc_sm_id;
-	int                     rc;
-	struct m0_dtm0_service *dtms = m0_dtm0_service_find(
-					fom->fo_service->rs_reqh);
-
-	M0_ENTRY("reqh=%p, target service " FID_F, dtms->dos_generic.rs_reqh,
-		  FID_P(tgt));
-
-	session = m0_dtm0_service_process_session_get(&dtms->dos_generic, tgt);
-	M0_ASSERT(session != NULL);
-	if (session == NULL)
-		return M0_ERR(-ENOENT);
-
-	fop = m0_fop_alloc_at(session, &dtm0_req_fop_fopt);
-	if (fop == NULL)
-		return M0_ERR(-ENOMEM);
-
-	item              = &fop->f_item;
-	item->ri_ops      = &dtm0_req_fop_rpc_item_ops;
-	item->ri_session  = session;
-	item->ri_prio     = M0_RPC_ITEM_PRIO_MID;
-	item->ri_deadline = M0_TIME_IMMEDIATELY;
-
-	req               = m0_fop_data(fop);
-	req->dtr_msg      = msg_type;
-	rc = m0_dtm0_tx_desc_copy(txd, &req->dtr_txr) ?: m0_rpc_post(item);
-	if (rc == 0) {
-		phase_sm_id = m0_sm_id_get(&fom->fo_sm_phase);
-		rpc_sm_id   = m0_sm_id_get(&item->ri_sm);
-		M0_ADDB2_ADD(M0_AVI_FOM_TO_TX, phase_sm_id, rpc_sm_id);
-
-		m0_fop_put_lock(fop);
-
-		M0_LOG(M0_DEBUG, "Sent %d msg " FID_F " -> " FID_F, msg_type,
-		       FID_P(&dtms->dos_generic.rs_service_fid), FID_P(tgt));
-	}
-	return M0_RC(rc);
+	struct m0_dtm0_service *dtms;
+	struct dtm0_req_fop req = {
+		.dtr_msg = msg_type,
+		.dtr_txr = *txd,
+	};
+	dtms = m0_dtm0_service_find(fom->fo_service->rs_reqh);
+	return m0_dtm0_req_post(dtms, &req, tgt, false);
 }
 
 M0_INTERNAL int m0_dtm0_logrec_update(struct m0_be_dtm0_log  *log,

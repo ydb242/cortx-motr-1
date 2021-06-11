@@ -118,6 +118,8 @@ function ha_msg_send_cli_online()
     done
 }
 
+# FIXME: this thing is not in use but it is quite useful.
+# Figure out where to put it.
 function expected_trace_lines_num()
 {
     local pattern="$1"
@@ -182,26 +184,29 @@ function main()
     get_params_for_ha_msgs
     get_m0d_pids
 
-    _info "Checking traces..."
-    expected_trace_lines_num "evented_proc_state" 0 || {
-        fail "HA event handled instead of to be skipped, exiting."
-    }
+    # FIXME: figure out what to do with this code.
+    # m0ham calls are not required anymore.
 
-    _info "Sending TRANSIENT notifications to trigger HA messages handling..."
-    ha_msg_send_transient
+    #_info "Checking traces..."
+    #expected_trace_lines_num "evented_proc_state" 0 || {
+    #    fail "HA event handled instead of to be skipped, exiting."
+    #}
 
-    _info "Checking traces..."
-    expected_trace_lines_num "TRANSIENT received" 1 || {
-        fail "Trigger message is not received, exiting."
-    }
+    #_info "Sending TRANSIENT notifications to trigger HA messages handling..."
+    #ha_msg_send_transient
 
-    _info "Sending ONLINE notifications to trigger connections logic..."
-    ha_msg_send_online
+    #_info "Checking traces..."
+    #expected_trace_lines_num "TRANSIENT received" 1 || {
+    #    fail "Trigger message is not received, exiting."
+    #}
 
-    _info "Checking traces..."
-    expected_trace_lines_num "DTM0 service: connected" $((${#M0D_ENDPOINTS[@]}-1)) || {
-        fail "Process is not connected, exiting"
-    }
+    #_info "Sending ONLINE notifications to trigger connections logic..."
+    #ha_msg_send_online
+
+    #_info "Checking traces..."
+    #expected_trace_lines_num "DTM0 service: connected" $((${#M0D_ENDPOINTS[@]}-1)) || {
+    #    fail "Process is not connected, exiting"
+    #}
 
     _info "Create m0crate configuration..."
     create_m0crate_cfg
@@ -211,7 +216,7 @@ function main()
     cli_pid=$!
     sleep 3
     _info "Sending client is ONLINE..."
-    ha_msg_send_cli_online
+    #ha_msg_send_cli_online
     _info "Wait for client..."
     wait $cli_pid
 
