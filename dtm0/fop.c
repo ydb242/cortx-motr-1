@@ -244,17 +244,20 @@ static size_t dtm0_fom_locality(const struct m0_fom *fom)
 	return locality++;
 }
 
-static int m0_dtm0_send_msg(struct m0_fom                *fom,
-			    enum m0_dtm0s_msg             msg_type,
-			    const struct m0_fid          *tgt,
-			    const struct m0_dtm0_tx_desc *txd)
+extern void llrf_fom_queue(struct m0_dtm0_service *dtm0,
+			   enum m0_dtm0s_msg             msg_type,
+			   const struct m0_fid          *tgt,
+			   const struct m0_dtm0_tx_desc *txd);
+
+int m0_dtm0_send_msg0(struct m0_fom                *fom,
+		      enum m0_dtm0s_msg             msg_type,
+		      const struct m0_fid          *tgt,
+		      const struct m0_dtm0_tx_desc *txd)
 {
 	struct m0_fop          *fop;
 	struct m0_rpc_session  *session;
 	struct m0_rpc_item     *item;
 	struct dtm0_req_fop    *req;
-	uint64_t                phase_sm_id;
-	uint64_t                rpc_sm_id;
 	int                     rc;
 	struct m0_dtm0_service *dtms = m0_dtm0_service_find(
 		fom->fo_service->rs_reqh);
@@ -279,9 +282,12 @@ static int m0_dtm0_send_msg(struct m0_fom                *fom,
 	req->dtr_msg      = msg_type;
 	rc = m0_dtm0_tx_desc_copy(txd, &req->dtr_txr) ?: m0_rpc_post(item);
 	if (rc == 0) {
-		phase_sm_id = m0_sm_id_get(&fom->fo_sm_phase);
-		rpc_sm_id   = m0_sm_id_get(&item->ri_sm);
-		M0_ADDB2_ADD(M0_AVI_FOM_TO_TX, phase_sm_id, rpc_sm_id);
+		//uint64_t                phase_sm_id;
+		//uint64_t                rpc_sm_id;
+		// XXX: return this back
+		//phase_sm_id = m0_sm_id_get(&fom->fo_sm_phase);
+		//rpc_sm_id   = m0_sm_id_get(&item->ri_sm);
+		//M0_ADDB2_ADD(M0_AVI_FOM_TO_TX, phase_sm_id, rpc_sm_id);
 
 		m0_fop_put_lock(fop);
 
@@ -289,6 +295,18 @@ static int m0_dtm0_send_msg(struct m0_fom                *fom,
 		       FID_P(&dtms->dos_generic.rs_service_fid), FID_P(tgt));
 	}
 	return M0_RC(rc);
+}
+
+static int m0_dtm0_send_msg(struct m0_fom                *fom,
+			    enum m0_dtm0s_msg             msg_type,
+			    const struct m0_fid          *tgt,
+			    const struct m0_dtm0_tx_desc *txd)
+{
+	llrf_fom_queue(m0_dtm0_service_find(fom->fo_service->rs_reqh),
+		       msg_type, tgt, txd);
+
+	//return m0_dtm0_send_msg0(fom, msg_type, tgt, txd);
+	return M0_RC(0); // LAZY_CONNECT
 }
 
 M0_INTERNAL int m0_dtm0_logrec_update(struct m0_be_dtm0_log  *log,

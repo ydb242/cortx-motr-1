@@ -53,6 +53,8 @@ struct m0_rpc_link {
 	struct m0_mutex        rlk_wait_mutex;
 	m0_time_t              rlk_timeout;
 	bool                   rlk_connected;
+	/* XXX: LAZY_CONNECT */
+	struct m0_co_op       *rlk_op;
 };
 
 enum m0_rpc_link_states {

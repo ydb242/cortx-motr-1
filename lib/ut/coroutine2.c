@@ -173,9 +173,24 @@ static void delete(struct m0_co_context *context,
 
 	M0_LOG(M0_DEBUG, "yield");
 	tree->delete++;
-	m0_co_op_active(&fom_op);
-	m0_semaphore_up(&delete1);
-	M0_CO_YIELD(context);
+	//m0_co_op_active(&fom_op);
+	//m0_semaphore_up(&delete1);
+	//M0_CO_YIELD(context);
+
+	//rpc_connect_async(..., co_op(fom));
+	//M0_CO_LIB_YIELD_OP(fom, next_state);
+
+	//op = rpc_connect_async(..., co_op(fom));
+	//M0_CO_LIB_YIELD_OP(op, next_state);
+
+	// final??
+
+	//rpc_connect_async(..., co_op(fom));
+	//M0_CO_LIB_YIELD_OP(fom, next_state);
+
+	//lock(fom);
+	//M0_CO_LIB_YIELD_LOCK(fom, next_state);
+
 
 	M0_LOG(M0_DEBUG, "yield");
 	tree->delete++;

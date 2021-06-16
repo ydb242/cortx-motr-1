@@ -34,12 +34,15 @@
 #include "lib/tlist.h"               /* tlist API */
 #include "be/dtm0_log.h"             /* DTM0 log API */
 #include "module/instance.h"         /* m0_get */
+#include "rpc/rpc_opcodes.h"         /* M0_DTM0_RPC_LINK_OPCODE */
 
 #include "conf/confc.h"   /* m0_confc */
 #include "conf/diter.h"   /* m0_conf_diter */
 #include "conf/obj_ops.h" /* M0_CONF_DIRNEXT */
 #include "conf/helpers.h" /* m0_confc_root_open, m0_conf_process2service_get */
 #include "reqh/reqh.h"    /* m0_reqh2confc */
+#include "lib/coroutine.h"
+
 
 static int dtm0_service__ha_subscribe(struct m0_reqh_service *service);
 static void dtm0_service__ha_unsubscribe(struct m0_reqh_service *service);
@@ -51,6 +54,15 @@ static void dtm0_service_prepare_to_stop(struct m0_reqh_service *service);
 static int dtm0_service_allocate(struct m0_reqh_service **service,
 				 const struct m0_reqh_service_type *stype);
 static void dtm0_service_fini(struct m0_reqh_service *service);
+static void llrf_fom_type_init(void);
+void llrf_fom_queue(struct m0_dtm0_service *dtm0,
+		    enum m0_dtm0s_msg             msg_type,
+		    const struct m0_fid          *tgt,
+		    const struct m0_dtm0_tx_desc *txd);
+
+static struct dtm0_process *
+dtm0_process__find_or_add(struct m0_reqh_service *service,
+			  const struct m0_fid    *connect_to);
 
 /* Settings for RPC connections with DTM0 services. */
 enum {
@@ -113,6 +125,12 @@ struct dtm0_process {
 	 */
 	struct m0_sm_ast        dop_service_connect_ast;
 	struct m0_clink         dop_service_connect_clink;
+
+	/**
+	 * Connect ops
+	 */
+	struct m0_co_op        *dop_op; // hackerish way to break interfaces, remove it from here.
+	struct m0_long_lock     dop_llock;
 };
 
 M0_TL_DESCR_DEFINE(dopr, "dtm0_process", static, struct dtm0_process, dop_link,
@@ -145,6 +163,7 @@ static void dtm0_service__init(struct m0_dtm0_service *s)
 	dopr_tlist_init(&s->dos_processes);
 	m0_dtm0_dtx_domain_init();
 	m0_dtm0_clk_src_init(&s->dos_clk_src, M0_DTM0_CS_PHYS);
+	llrf_fom_type_init();
 }
 
 static void dtm0_service__fini(struct m0_dtm0_service *s)
@@ -224,11 +243,13 @@ m0_dtm0_service_process_connect(struct m0_reqh_service *s,
 	       !!async, FID_P(&s->rs_service_fid), FID_P(remote_srv),
 	       remote_ep);
 
-	if (async)
+	if (async) {
+		process->dop_rlink.rlk_op = process->dop_op;
 		m0_rpc_link_connect_async(&process->dop_rlink,
 					  M0_TIME_NEVER,
-					  &process->dop_service_connect_clink);
-	else
+					  NULL);
+					  /* LAZY_CONNECT &process->dop_service_connect_clink); */
+	} else
 		rc = m0_rpc_link_connect_sync(&process->dop_rlink,
 					      M0_TIME_NEVER);
 
@@ -247,6 +268,7 @@ static int dtm0_process_disconnect(struct dtm0_process *process)
 	if (M0_IS0(&process->dop_rlink))
 		return M0_RC(0);
 
+	process->dop_rlink.rlk_op = NULL; //LAZY_CONNECT hack!
 	rc = m0_rpc_link_is_connected(&process->dop_rlink) ?
 		m0_rpc_link_disconnect_sync(&process->dop_rlink, timeout) : 0;
 
@@ -259,6 +281,11 @@ static int dtm0_process_disconnect(struct dtm0_process *process)
 		m0_rpc_link_fini(&process->dop_rlink);
 		M0_SET0(&process->dop_rlink);
 	}
+
+	// LAZY_CONNECT looks like not a hack, let's check.
+	dopr_tlist_del(process);
+	dopr_tlink_fini(process);
+	m0_free(process);
 
 	return M0_RC(rc);
 }
@@ -374,13 +401,13 @@ out:
 static int dtm0_service_start(struct m0_reqh_service *service)
 {
         M0_PRE(service != NULL);
-        return dtm_service__origin_fill(service) ?:
-		dtm0_service__ha_subscribe(service);
+        return dtm_service__origin_fill(service);
+		/* ?: dtm0_service__ha_subscribe(service); LAZY_CONNECT */
 }
 
 static void dtm0_service_prepare_to_stop(struct m0_reqh_service *service)
 {
-	dtm0_service__ha_unsubscribe(service);
+	/* dtm0_service__ha_unsubscribe(service); LAZY_CONNECT */
 }
 
 static void dtm0_service_stop(struct m0_reqh_service *service)
@@ -578,7 +605,7 @@ static bool conf_obj_is_process(const struct m0_conf_obj *obj)
 	return m0_conf_obj_type(obj) == &M0_CONF_PROCESS_TYPE;
 }
 
-static int dtm0_service__ha_subscribe(struct m0_reqh_service *service)
+M0_UNUSED /* LAZY_CONNECT */static int dtm0_service__ha_subscribe(struct m0_reqh_service *service)
 {
 	struct m0_confc        *confc = m0_reqh2confc(service->rs_reqh);
 	struct m0_conf_root    *root;
@@ -646,7 +673,7 @@ static int dtm0_service__ha_subscribe(struct m0_reqh_service *service)
 	return M0_RC(0);
 }
 
-static void dtm0_service__ha_unsubscribe(struct m0_reqh_service *reqh_service)
+M0_UNUSED /* LAZY_CONNECT */ static void dtm0_service__ha_unsubscribe(struct m0_reqh_service *reqh_service)
 {
 	struct dtm0_process    *process;
 	struct m0_dtm0_service *service;
@@ -670,6 +697,267 @@ static void dtm0_service__ha_unsubscribe(struct m0_reqh_service *reqh_service)
 	M0_LEAVE();
 }
 
+
+// ----------------------------------------------------------------------------
+
+/* lazily_linked_rpc_fom */
+struct llrf_fom {
+	struct m0_fom           rf_gen;
+
+	/* context */
+	struct m0_co_context     rf_co;
+	struct m0_co_op          rf_op;
+	struct m0_long_lock_link rf_llink;
+
+	/* data */
+	struct m0_dtm0_service *rf_dtm0;
+	struct m0_fid           rf_tgt;
+	struct m0_dtm0_tx_desc  rf_txd;
+	enum m0_dtm0s_msg       rf_type;
+
+};
+
+static struct llrf_fom *to_llrf(struct m0_fom *fom)
+{
+	return (struct llrf_fom *) fom; 	/* XXX */
+}
+
+static size_t llrf_fom_locality(const struct m0_fom *fom)
+{
+	/* static size_t loc; */
+	/* return loc++; */
+	return 1; // ignore locking
+}
+
+static void llrf_fom_fini(struct m0_fom *fom)
+{
+	struct llrf_fom *llrf = to_llrf(fom);
+
+	m0_co_context_fini(&llrf->rf_co);
+	m0_co_op_fini(&llrf->rf_op);
+	m0_fom_fini(&llrf->rf_gen);
+	m0_free(llrf);
+}
+
+static int llrf_fom_tick(struct m0_fom *fom);
+
+static const struct m0_fom_ops llrf_fom_ops = {
+	.fo_fini          = llrf_fom_fini,
+	.fo_tick          = llrf_fom_tick,
+	.fo_home_locality = llrf_fom_locality
+};
+
+static struct m0_fom_type llrf_fom_type;
+static const struct m0_fom_type_ops llrf_fom_type_ops = {};
+
+enum llrf_phase {
+	RF_INIT   = M0_FOM_PHASE_INIT,
+	RF_FINISH = M0_FOM_PHASE_FINISH,
+	RF_FAILED = M0_FOM_PHASE_NR,
+	RF_NR,
+};
+
+static struct m0_sm_state_descr llrf_phases[RF_NR] = {
+#define _ST(name, flags, allowed)      \
+	[name] = {                    \
+		.sd_flags   = flags,  \
+		.sd_name    = #name,  \
+		.sd_allowed = allowed \
+	}
+
+	_ST(RF_INIT,   M0_SDF_INITIAL, M0_BITS(RF_INIT, RF_FINISH)),
+	_ST(RF_FAILED, M0_SDF_FAILURE, M0_BITS(RF_FINISH)),
+	_ST(RF_FINISH, M0_SDF_TERMINAL, 0),
+#undef _ST
+};
+
+static struct m0_sm_conf llrf_conf = {
+	.scf_name      = "llrf_phases",
+	.scf_nr_states = ARRAY_SIZE(llrf_phases),
+	.scf_state     = llrf_phases,
+};
+
+static void llrf_fom_type_init(void)
+{
+	m0_fom_type_init(&llrf_fom_type,
+			 M0_DTM0_RPC_LINK_OPCODE,
+			 &llrf_fom_type_ops,
+			 &dtm0_service_type,
+			 &llrf_conf);
+}
+
+void llrf_fom_queue(struct m0_dtm0_service       *dtm0,
+		    enum m0_dtm0s_msg             msg_type,
+		    const struct m0_fid          *tgt,
+		    const struct m0_dtm0_tx_desc *txd)
+{
+	/* M0_SET0(&fom); LAZY_CONNECT: embedd supplimentary fom into the
+	 * dtm0_req_fop */
+	int rc;
+	struct llrf_fom *fom;
+	M0_ALLOC_PTR(fom);
+	M0_ASSERT(fom != NULL);
+
+	m0_co_op_init(&fom->rf_op);
+	rc = m0_co_context_init(&fom->rf_co);
+	M0_ASSERT(rc == 0);
+
+	fom->rf_dtm0 = dtm0;
+	fom->rf_type = msg_type;
+	rc = m0_dtm0_tx_desc_copy(txd, &fom->rf_txd);
+	M0_ASSERT(rc == 0);
+	fom->rf_tgt = *tgt;
+
+	m0_fom_init(&fom->rf_gen, &llrf_fom_type, &llrf_fom_ops,
+		    NULL, NULL, dtm0->dos_generic.rs_reqh);
+	m0_fom_queue(&fom->rf_gen);
+}
+
+#define F M0_CO_FRAME_DATA
+extern int m0_dtm0_send_msg0(struct m0_fom                *fom,
+			     enum m0_dtm0s_msg             msg_type,
+			     const struct m0_fid          *tgt,
+			     const struct m0_dtm0_tx_desc *txd);
+
+static void lazyx(struct m0_fom *fom)
+{
+	int rc;
+	struct llrf_fom     *llrf = to_llrf(fom);
+	struct m0_co_context *context = &to_llrf(fom)->rf_co;
+	M0_CO_REENTER(context,
+		      struct dtm0_process *process;
+		);
+
+	// locks are needed here, still we're in the same locality therefore nothing bad will happen TODAY.
+	// the final patch should have a full-fledged locks.
+	F(process) = dtm0_process__find_or_add(&llrf->rf_dtm0->dos_generic,
+					       &llrf->rf_tgt);
+	M0_ASSERT(F(process) != NULL);
+
+	m0_long_lock_link_init(&llrf->rf_llink, fom, NULL);
+	rc = M0_FOM_LONG_LOCK_RETURN(m0_long_write_lock(&F(process)->dop_llock,
+							&llrf->rf_llink,
+							m0_fom_phase(fom)));
+	M0_CO_YIELD_WITH_CODE(context, rc);
+
+	// it's move effective to check connected state under the read lock.
+	if (!m0_rpc_link_is_connected(&F(process)->dop_rlink)) {
+		// propagate fom->op into internals of the interface.
+		F(process)->dop_op = &llrf->rf_op;
+		rc = m0_dtm0_service_process_connect(F(process)->dop_dtm0_service,
+						     &F(process)->dop_rserv_fid,
+						     F(process)->dop_rep,
+						     true);
+		M0_ASSERT(rc == 0);
+		M0_CO_YIELD(context);
+	}
+
+	m0_long_write_unlock(&F(process)->dop_llock, &llrf->rf_llink);
+
+	rc = m0_dtm0_send_msg0(fom, llrf->rf_type, &llrf->rf_tgt, &llrf->rf_txd);
+	M0_ASSERT(rc == 0);
+	M0_LOG(M0_DEBUG, "END");
+}
+
+static int llrf_fom_tick(struct m0_fom *fom0)
+{
+	int rc;
+	struct llrf_fom *fom = to_llrf(fom0);
+
+	m0_co_op_reset(&fom->rf_op);
+
+	M0_CO_START(&fom->rf_co);
+	lazyx(fom0);
+	rc = M0_CO_END(&fom->rf_co);
+
+	if (rc == -EAGAIN)
+		return m0_co_op_tick_ret(&fom->rf_op, fom0,
+					 m0_fom_phase(fom0));
+	else if (M0_IN(rc, (M0_FSO_WAIT, M0_FSO_AGAIN))) {
+		return rc;
+	}
+
+	m0_fom_phase_set(fom0, RF_FINISH);
+	return M0_FSO_WAIT;
+}
+
+static struct dtm0_process *
+dtm0_process__find_or_add(struct m0_reqh_service *service,
+			  const struct m0_fid    *connect_to)
+{
+	struct m0_confc        *confc = m0_reqh2confc(service->rs_reqh);
+	struct m0_conf_root    *root;
+	struct m0_conf_diter    it;
+	struct m0_conf_obj     *obj;
+	struct m0_conf_process *process;
+	struct dtm0_process    *dtm0_process;
+	struct m0_dtm0_service *s;
+	struct m0_fid           rproc_fid;
+	struct m0_fid           rserv_fid;
+
+	int rc;
+
+	M0_ENTRY();
+
+	M0_PRE(service != NULL);
+	s = container_of(service, struct m0_dtm0_service, dos_generic);
+
+
+	/* easy way; LAZY_CONNECT*/
+	dtm0_process = dtm0_service_process__lookup(service, connect_to);
+	if (dtm0_process != NULL)
+		return dtm0_process;
+
+
+	/** UT workaround */
+	if (!m0_confc_is_inited(confc)) {
+		M0_LOG(M0_WARN, "confc is not initiated!");
+		return NULL;
+	}
+
+	rc = m0_confc_root_open(confc, &root);
+	if (rc != 0)
+		return NULL;
+
+	rc = m0_conf_diter_init(&it, confc,
+				&root->rt_obj,
+				M0_CONF_ROOT_NODES_FID,
+				M0_CONF_NODE_PROCESSES_FID);
+	if (rc != 0) {
+		m0_confc_close(&root->rt_obj);
+		return NULL;
+	}
+
+	while ((rc = m0_conf_diter_next_sync(&it, conf_obj_is_process)) > 0) {
+		obj = m0_conf_diter_result(&it);
+		process = M0_CONF_CAST(obj, m0_conf_process);
+		rproc_fid = process->pc_obj.co_id;
+		rc = m0_conf_process2service_get(confc, &rproc_fid,
+						 M0_CST_DTM0, &rserv_fid);
+		if (rc == 0) {
+			/* skip everything except target */
+			if (!m0_fid_eq(&rserv_fid, connect_to))
+				continue;
+
+			M0_ALLOC_PTR(dtm0_process);
+			M0_ASSERT(dtm0_process != NULL); /* XXX */
+			//dtm0_process__ha_state_subscribe(dtm0_process, obj);
+			dopr_tlink_init(dtm0_process);
+			dopr_tlist_add(&s->dos_processes, dtm0_process);
+			dtm0_process->dop_rproc_fid = rproc_fid;
+			dtm0_process->dop_rserv_fid = rserv_fid;
+			dtm0_process->dop_rep =	m0_strdup(process->pc_endpoint);
+			dtm0_process->dop_dtm0_service = service;
+			m0_long_lock_init(&dtm0_process->dop_llock);
+			break;
+		}
+	}
+
+	m0_conf_diter_fini(&it);
+	m0_confc_close(&root->rt_obj);
+
+	return dtm0_process;
+}
 
 /*
  *  Local variables:

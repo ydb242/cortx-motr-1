@@ -37,6 +37,7 @@
 #include "rpc/link.h"
 #include "rpc/session_internal.h"     /* m0_rpc_session_fini_locked */
 #include "rpc/conn_internal.h"        /* m0_rpc_conn_remove_session */
+#include "lib/coroutine.h"
 
 /**
  * @addtogroup rpc_link
@@ -471,6 +472,9 @@ static void rpc_link_fom_fini_common(struct m0_fom *fom, bool connected)
 	rlink->rlk_connected = connected && (rlink->rlk_rc == 0);
 	m0_chan_broadcast_lock(&rlink->rlk_wait);
 
+	if (rlink->rlk_op != NULL)
+		m0_co_op_done(rlink->rlk_op);
+
 	M0_LEAVE();
 }
 
@@ -612,6 +616,7 @@ M0_INTERNAL int m0_rpc_link_init(struct m0_rpc_link *rlink,
 
 	rlink->rlk_connected = false;
 	rlink->rlk_rc        = 0;
+	rlink->rlk_op        = NULL;
 
 	rc = m0_net_end_point_create(&net_ep, &mach->rm_tm, ep);
 	if (rc == 0) {
@@ -679,6 +684,8 @@ static void rpc_link_fom_queue(struct m0_rpc_link *rlink,
 	rlink->rlk_rc = 0;
 	if (wait_clink != NULL)
 		m0_clink_add_lock(&rlink->rlk_wait, wait_clink);
+	if (rlink->rlk_op != NULL)
+		m0_co_op_active(rlink->rlk_op);
 	M0_SET0(&rlink->rlk_fom);
 	m0_fom_init(&rlink->rlk_fom, fom_type, fom_ops, NULL, NULL,
 		    mach->rm_reqh);

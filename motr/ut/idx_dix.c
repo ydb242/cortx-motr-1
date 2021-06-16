@@ -818,9 +818,13 @@ static int duc_setup(void)
 		M0_UT_ASSERT(ut_m0c->m0c_dtms != NULL);
 		srv_reqh = &dix_ut_sctx.rsx_motr_ctx.cc_reqh_ctx.rc_reqh;
 		srv_srv = m0_reqh_service_lookup(srv_reqh, &srv_dtm0_fid);
+
+		// LAZY_CONNECT: don't connect today.
+		if (0) {
 		rc = m0_dtm0_service_process_connect(srv_srv, &cli_srv_fid,
 						     cl_ep_addr, false);
 		M0_UT_ASSERT(rc == 0);
+		}
 	}
 
 	general_ifid_fill(&duc.duc_ifid, true);
@@ -879,6 +883,7 @@ static int duc_teardown(void)
 	int                      rc;
 
 	if (ENABLE_DTM0) {
+		//	if (/* ENABLE_DTM0 */ /* LAZY_CONNECT */ false) {
 		/* Disconnect from the server */
 		rc = m0_dtm0_service_process_disconnect(srv_srv, &cli_srv_fid);
 		M0_UT_ASSERT(rc == 0);
