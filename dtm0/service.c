@@ -227,7 +227,8 @@ m0_dtm0_service_process_connect(struct m0_reqh_service *s,
 	if (async)
 		m0_rpc_link_connect_async(&process->dop_rlink,
 					  M0_TIME_NEVER,
-					  &process->dop_service_connect_clink);
+					  &process->dop_service_connect_clink,
+					  NULL);
 	else
 		rc = m0_rpc_link_connect_sync(&process->dop_rlink,
 					      M0_TIME_NEVER);

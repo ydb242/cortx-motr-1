@@ -292,7 +292,7 @@ M0_INTERNAL void m0_co_op_reset(struct m0_co_op *op);
 M0_INTERNAL void m0_co_op_active(struct m0_co_op *op);
 M0_INTERNAL void m0_co_op_done(struct m0_co_op *op);
 
-/* Don't introduce co_op_wait()! co_op intended to be used inside foms. */
+M0_INTERNAL void m0_co_op_wait(struct m0_co_op *op);
 M0_INTERNAL int m0_co_op_tick_ret(struct m0_co_op *op,
 				  struct m0_fom   *fom,
 				  int              next_state);

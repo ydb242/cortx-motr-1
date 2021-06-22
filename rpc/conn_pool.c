@@ -269,7 +269,8 @@ M0_INTERNAL int m0_rpc_conn_pool_get_async(
 			m0_rpc_link_connect_async(
 				&item->cpi_rpc_link,
 				pool->cp_timeout,
-				&item->cpi_clink);
+				&item->cpi_clink,
+				NULL);
 			rc = -EBUSY;
 		}
 	} else {

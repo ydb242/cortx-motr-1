@@ -1436,7 +1436,7 @@ static int ha_link_outgoing_fom_tick(struct m0_fom *fom)
 		abs_timeout = m0_time_add(m0_time_now(),
 		                          hl->hln_conn_cfg.hlcc_connect_timeout);
 		m0_rpc_link_connect_async(&hl->hln_rpc_link, abs_timeout,
-		                          &hl->hln_rpc_wait);
+		                          &hl->hln_rpc_wait, NULL);
 		m0_fom_phase_set(fom, HA_LINK_OUTGOING_STATE_INCOMING_REGISTER);
 		return M0_RC(M0_FSO_AGAIN);
 	case HA_LINK_OUTGOING_STATE_INCOMING_REGISTER:
@@ -1476,7 +1476,7 @@ static int ha_link_outgoing_fom_tick(struct m0_fom *fom)
 		abs_timeout = m0_time_add(m0_time_now(),
 				  hl->hln_conn_cfg.hlcc_disconnect_timeout);
 		m0_rpc_link_disconnect_async(&hl->hln_rpc_link, abs_timeout,
-		                             &hl->hln_rpc_wait);
+		                             &hl->hln_rpc_wait, NULL);
 		m0_fom_phase_set(fom, HA_LINK_OUTGOING_STATE_INCOMING_QUIESCE);
 		return M0_RC(M0_FSO_AGAIN);
 	case HA_LINK_OUTGOING_STATE_INCOMING_QUIESCE:
