@@ -2125,7 +2125,8 @@ static void rconfc_conductor_drained(struct m0_rconfc *rconfc)
 	rconfc->rc_conductor_clink.cl_is_oneshot = true;
 	m0_rpc_link_disconnect_async(&rconfc->rc_confc.cc_rlink,
 				     m0_rpc__down_timeout(),
-				     &rconfc->rc_conductor_clink);
+				     &rconfc->rc_conductor_clink,
+				     NULL);
 	M0_LEAVE();
 }
 

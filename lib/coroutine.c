@@ -248,6 +248,18 @@ M0_INTERNAL int m0_co_op_tick_ret(struct m0_co_op *op,
 }
 M0_EXPORTED(m0_co_op_tick_ret);
 
+M0_INTERNAL void m0_co_op_wait(struct m0_co_op *op)
+{
+	struct m0_sm *sm = &op->co_sm;
+	int           rc;
+
+	m0_sm_group_lock(&op->co_sm_group);
+	rc = m0_sm_timedwait(sm, M0_BITS(COR_DONE), M0_TIME_NEVER);
+	M0_ASSERT_INFO(rc == 0, "rc=%d", rc);
+	m0_sm_group_unlock(&op->co_sm_group);
+}
+M0_EXPORTED(m0_co_op_wait);
+
 #undef M0_TRACE_SUBSYSTEM
 
 /** @} end of Coroutine group */

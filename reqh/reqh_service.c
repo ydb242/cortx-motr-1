@@ -724,7 +724,7 @@ static void reqh_service_connect_locked(struct m0_reqh_service_ctx *ctx,
 	m0_rpc_link_reset(&ctx->sc_rlink);
 	reqh_service_ctx_state_move(ctx, M0_RSC_CONNECTING);
 	m0_rpc_link_connect_async(&ctx->sc_rlink, deadline,
-				  &ctx->sc_rlink_wait);
+				  &ctx->sc_rlink_wait, NULL);
 }
 
 M0_INTERNAL void m0_reqh_service_connect(struct m0_reqh_service_ctx *ctx)
@@ -775,7 +775,7 @@ reqh_service_disconnect_locked(struct m0_reqh_service_ctx *ctx)
 		  M0_TIME_IMMEDIATELY : m0_rpc__down_timeout();
 	reqh_service_ctx_state_move(ctx, M0_RSC_DISCONNECTING);
 	m0_rpc_link_disconnect_async(&ctx->sc_rlink, timeout,
-				     &ctx->sc_rlink_wait);
+				     &ctx->sc_rlink_wait, NULL);
 }
 
 M0_INTERNAL void m0_reqh_service_disconnect(struct m0_reqh_service_ctx *ctx)
