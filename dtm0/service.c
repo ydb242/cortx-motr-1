@@ -476,7 +476,8 @@ struct drlink_fom {
 	struct m0_fid            df_tgt;
 	struct m0_fop           *df_rfop;
 	struct m0_dtm0_service  *df_svc;
-	bool                     df_wait_for_reply;
+	struct m0_co_op          df_co_op;
+	bool                     df_wait_for_ack;
 };
 
 static struct drlink_fom *fom2drlink_fom(struct m0_fom *fom)
@@ -557,7 +558,8 @@ static void dtm0_req_fop_fini(struct dtm0_req_fop *req)
 static int drlink_fom_init(struct drlink_fom            *fom,
 			   struct m0_dtm0_service       *svc,
 			   const struct m0_fid          *tgt,
-			   const struct dtm0_req_fop    *req)
+			   const struct dtm0_req_fop    *req,
+			   bool                          wait_for_ack)
 {
 	struct m0_rpc_machine  *mach;
 	struct m0_reqh         *reqh;
@@ -584,7 +586,12 @@ static int drlink_fom_init(struct drlink_fom            *fom,
 		return M0_ERR(-ENOMEM);
 	}
 
-	fop->f_opaque = fom;
+	/*
+	 * When ACK is not required, the FOM may be released before
+	 * the received callback is triggered.
+	 * See ::dtm0_rlink_rpc_item_reply_cb.
+	 */
+	fop->f_opaque = wait_for_ack ? fom : NULL;
 
 	m0_fom_init(&fom->df_gen, &drlink_fom_type, &drlink_fom_ops,
 		    NULL, NULL, reqh);
@@ -593,9 +600,10 @@ static int drlink_fom_init(struct drlink_fom            *fom,
 	fom->df_rfop =  fop;
 	fom->df_svc  =  svc;
 	fom->df_tgt  = *tgt;
-	fom->df_wait_for_reply = false;
+	fom->df_wait_for_ack = wait_for_ack;
 
 	m0_co_context_init(&fom->df_co);
+	m0_co_op_init(&fom->df_co_op);
 
 	M0_LEAVE();
 
@@ -612,7 +620,7 @@ static void co_long_write_lock(struct m0_co_context *context,
 	M0_CO_REENTER(context);
 	outcome = M0_FOM_LONG_LOCK_RETURN(m0_long_write_lock(lk, link,
 							     next_phase));
-	M0_CO_YIELD_WITH(context, outcome);
+	M0_CO_YIELD_RC(context, outcome);
 }
 
 static void co_rpc_link_connect(struct m0_co_context *context,
@@ -629,7 +637,7 @@ static void co_rpc_link_connect(struct m0_co_context *context,
 	m0_rpc_link_connect_async(rlink, M0_TIME_NEVER, NULL);
 	m0_fom_phase_set(fom, next_phase);
 
-	M0_CO_YIELD_WITH(context, M0_FSO_WAIT);
+	M0_CO_YIELD_RC(context, M0_FSO_WAIT);
 }
 
 static int dtm0_process_init(struct dtm0_process    *proc,
@@ -756,10 +764,12 @@ static struct m0_sm_state_descr drlink_fom_states[] = {
 		.sd_allowed   = 0,
 		.sd_flags     = M0_SDF_TERMINAL,
 	},
+
+	/* failure states */
 	[DRF_FAILED] = {
 		.sd_name      = "DRF_FAILED",
-		.sd_allowed   = 0,
-		.sd_flags     = M0_SDF_TERMINAL,
+		.sd_allowed   = M0_BITS(DRF_DONE),
+		.sd_flags     = M0_SDF_FAILURE,
 	},
 
 	/* intermediate states */
@@ -807,7 +817,8 @@ static struct m0_sm_trans_descr drlink_fom_trans[] = {
 	 */
 	{ "no-reply-reconn", DRF_WAITING_FOR_REPLY, DRF_TRYING_TO_CONNECT },
 #endif
-	{ "delivered",       DRF_WAITING_FOR_REPLY, DRF_DONE              }
+	{ "delivered",       DRF_WAITING_FOR_REPLY, DRF_DONE              },
+	{ "failed",          DRF_FAILED,            DRF_DONE              },
 };
 
 const static struct m0_sm_conf drlink_fom_conf = {
@@ -839,8 +850,8 @@ static void dtm0_rlink_rpc_item_reply_cb(struct m0_rpc_item *item)
 		M0_ASSERT(M0_IN(m0_fop_opcode(reply), (M0_DTM0_REP_OPCODE)));
 	}
 
-	if (df->df_wait_for_reply)
-		m0_fom_wakeup(&df->df_gen);
+	if (df != NULL)
+		m0_co_op_done(&df->df_co_op);
 
 	M0_LEAVE("reply=%p", reply);
 }
@@ -865,9 +876,9 @@ static int dtm0_process_rlink_reinit(struct dtm0_process *proc,
 }
 
 static int dtm0_process_rlink_send(struct dtm0_process *proc,
-				   struct drlink_fom *df)
+				   struct drlink_fom *drf)
 {
-	struct m0_fop          *fop = df->df_rfop;
+	struct m0_fop          *fop = drf->df_rfop;
 	struct m0_rpc_session  *session = &proc->dop_rlink.rlk_sess;
 	struct m0_rpc_item     *item = &fop->f_item;
 
@@ -875,6 +886,9 @@ static int dtm0_process_rlink_send(struct dtm0_process *proc,
 	item->ri_session  = session;
 	item->ri_prio     = M0_RPC_ITEM_PRIO_MID;
 	item->ri_deadline = M0_TIME_IMMEDIATELY;
+
+	if (drf->df_wait_for_ack)
+		m0_co_op_active(&drf->df_co_op);
 
 	return m0_rpc_post(item);
 }
@@ -919,7 +933,6 @@ static void drlink_coro_fom_tick(struct m0_co_context *context)
 	int                 rc   = 0;
 	struct drlink_fom  *drf  = M0_AMB(drf, context, df_co);
 	struct m0_fom      *fom  = &drf->df_gen;
-	struct m0_rpc_item *item = &drf->df_rfop->f_item;
 
 	M0_CO_REENTER(context,
 		      struct m0_long_lock_link   llink;
@@ -963,14 +976,12 @@ static void drlink_coro_fom_tick(struct m0_co_context *context)
 	if (rc != 0)
 		goto unlock;
 
-	if (drf->df_wait_for_reply) {
-		m0_fom_phase_set(fom, DRF_WAITING_FOR_REPLY);
-		M0_CO_YIELD_WITH(context, M0_FSO_WAIT);
-		if (m0_rpc_item_error(item) != 0)
-			goto unlock;
+	if (drf->df_wait_for_ack) {
+		M0_CO_YIELD_RC(context,
+			       m0_co_op_tick_ret(&drf->df_co_op, fom,
+						 DRF_WAITING_FOR_REPLY));
+		rc = m0_rpc_item_error(&drf->df_rfop->f_item);
 	}
-
-	m0_fom_phase_set(fom, DRF_DONE);
 
 unlock:
 	m0_long_write_unlock(&F(proc)->dop_llock, &F(llink));
@@ -978,14 +989,13 @@ unlock:
 out:
 	if (rc != 0)
 		m0_fom_phase_move(fom, rc, DRF_FAILED);
+
+	m0_fom_phase_set(fom, DRF_DONE);
 }
 
 static int drlink_fom_tick(struct m0_fom *fom)
 {
-	struct m0_co_context *co;
-
-	co = &fom2drlink_fom(fom)->df_co;
-
+	struct m0_co_context *co = &fom2drlink_fom(fom)->df_co;
 	M0_CO_START(co);
 	drlink_coro_fom_tick(co);
 	return M0_CO_END(co) ?: M0_FSO_WAIT;
@@ -994,7 +1004,7 @@ static int drlink_fom_tick(struct m0_fom *fom)
 M0_INTERNAL int m0_dtm0_req_post(struct m0_dtm0_service    *svc,
 				 const struct dtm0_req_fop *req,
 				 const struct m0_fid       *tgt,
-				 bool                       sync)
+				 bool                       wait_for_ack)
 {
 	int                  rc;
 	struct drlink_fom   *fom;
@@ -1005,13 +1015,11 @@ M0_INTERNAL int m0_dtm0_req_post(struct m0_dtm0_service    *svc,
 	if (fom == NULL)
 		return M0_ERR(-ENOMEM);
 
-	rc = drlink_fom_init(fom, svc, tgt, req);
+	rc = drlink_fom_init(fom, svc, tgt, req, wait_for_ack);
 	if (rc != 0) {
 		m0_free(fom);
 		return M0_ERR(rc);
 	}
-
-	fom->df_wait_for_reply = true;
 
 	m0_fom_queue(&fom->df_gen);
 

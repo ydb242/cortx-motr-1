@@ -255,7 +255,7 @@ static int m0_dtm0_send_msg(struct m0_fom                *fom,
 		.dtr_txr = *txd,
 	};
 	dtms = m0_dtm0_service_find(fom->fo_service->rs_reqh);
-	return m0_dtm0_req_post(dtms, &req, tgt, false);
+	return m0_dtm0_req_post(dtms, &req, tgt, true);
 }
 
 M0_INTERNAL int m0_dtm0_logrec_update(struct m0_be_dtm0_log  *log,

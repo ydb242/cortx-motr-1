@@ -58,7 +58,7 @@ static void foo0(struct m0_co_context *context, int nr, int *ret)
 	M0_UT_ASSERT(F(a) == 0x200);
 	M0_UT_ASSERT(m0_streq(F(b), foo0_str));
 
-	M0_CO_YIELD_WITH(context, -EAGAIN);
+	M0_CO_YIELD(context);
 
 	M0_UT_ASSERT(F(rc) == 101);
 	M0_UT_ASSERT(F(rc1) == 302);
@@ -110,7 +110,7 @@ static void foo2(struct m0_co_context *context, int *ret)
 
 	F(rc) = 103;
 
-	M0_CO_YIELD_WITH(context, -EAGAIN);
+	M0_CO_YIELD(context);
 
 	M0_UT_ASSERT(F(rc) == 103);
 	F(rc) = 303;
