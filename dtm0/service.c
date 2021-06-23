@@ -623,6 +623,20 @@ static void co_long_write_lock(struct m0_co_context *context,
 	M0_CO_YIELD_RC(context, outcome);
 }
 
+/* FIXME: remove this after review */
+#if 0
+static void co_fom_co_op_wait(struct m0_co_context *context,
+			      struct m0_fom        *fom,
+			      struct m0_co_op      *op
+			      int                   next_phase)
+{
+	M0_CO_REENTER(context);
+	M0_CO_YIELD_RC(context,
+		       m0_co_op_tick_ret(op, fom, next_phase));
+	m0_co_op_reset(op);
+}
+#endif
+
 static void co_rpc_link_connect(struct m0_co_context *context,
 				struct m0_rpc_link *rlink,
 				struct m0_fom *fom,
@@ -634,7 +648,7 @@ static void co_rpc_link_connect(struct m0_co_context *context,
 	m0_fom_wait_on(fom, &rlink->rlk_wait, &fom->fo_cb);
 	m0_chan_unlock(&rlink->rlk_wait);
 
-	m0_rpc_link_connect_async(rlink, M0_TIME_NEVER, NULL);
+	m0_rpc_link_connect_async(rlink, M0_TIME_NEVER, NULL, NULL);
 	m0_fom_phase_set(fom, next_phase);
 
 	M0_CO_YIELD_RC(context, M0_FSO_WAIT);
@@ -977,9 +991,14 @@ static void drlink_coro_fom_tick(struct m0_co_context *context)
 		goto unlock;
 
 	if (drf->df_wait_for_ack) {
+#if 0
+		M0_CO_FUN(context, co_fom_co_op_wait(context, fom, OP(fom),
+						     DRF_WAITING_FOR_REPLY));
+#endif
 		M0_CO_YIELD_RC(context,
 			       m0_co_op_tick_ret(&drf->df_co_op, fom,
 						 DRF_WAITING_FOR_REPLY));
+		m0_co_op_reset(&drf->df_co_op);
 		rc = m0_rpc_item_error(&drf->df_rfop->f_item);
 	}
 
