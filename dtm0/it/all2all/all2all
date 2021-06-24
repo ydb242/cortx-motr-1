@@ -215,9 +215,9 @@ function main()
     $MOTR_ROOT/motr/m0crate/m0crate -S $M0CRATE_CFG &
     cli_pid=$!
     sleep 3
-    _info "Sending client is ONLINE..."
+    #_info "Sending client is ONLINE..."
     #ha_msg_send_cli_online
-    _info "Wait for client..."
+    _info "Wait for client $cli_pid ..."
     wait $cli_pid
 
     stop_cluster
