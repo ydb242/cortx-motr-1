@@ -478,6 +478,7 @@ struct drlink_fom {
 	struct m0_dtm0_service  *df_svc;
 	struct m0_co_op          df_co_op;
 	bool                     df_wait_for_ack;
+	uint64_t                 df_parent_sm_id;
 };
 
 static struct drlink_fom *fom2drlink_fom(struct m0_fom *fom)
@@ -490,16 +491,14 @@ static struct drlink_fom *fom2drlink_fom(struct m0_fom *fom)
 static size_t drlink_fom_locality(const struct m0_fom *fom)
 {
 	static size_t loc;
+	/*
+	 * At this moment, any locality can be the home locality
+	 * for this kind of FOM.
+	 */
 	return loc++;
 }
 
-static void drlink_fom_fini(struct m0_fom *fom)
-{
-	struct drlink_fom *df = fom2drlink_fom(fom);
-	m0_fop_put_lock(df->df_rfop);
-	m0_fom_fini(fom);
-}
-
+static void drlink_fom_fini(struct m0_fom *fom);
 static int  drlink_fom_tick(struct m0_fom *fom);
 
 static const struct m0_fom_ops drlink_fom_ops = {
@@ -509,7 +508,6 @@ static const struct m0_fom_ops drlink_fom_ops = {
 };
 
 static struct m0_fom_type drlink_fom_type;
-
 static const struct m0_fom_type_ops drlink_fom_type_ops = {};
 const static struct m0_sm_conf drlink_fom_conf;
 
@@ -520,7 +518,6 @@ static int m0_dtm0_rpc_link_mod_init(void)
 			 &drlink_fom_type_ops,
 			 &dtm0_service_type,
 			 &drlink_fom_conf);
-
 	return 0;
 }
 
@@ -559,6 +556,7 @@ static int drlink_fom_init(struct drlink_fom            *fom,
 			   struct m0_dtm0_service       *svc,
 			   const struct m0_fid          *tgt,
 			   const struct dtm0_req_fop    *req,
+			   const struct m0_fom          *parent_fom,
 			   bool                          wait_for_ack)
 {
 	struct m0_rpc_machine  *mach;
@@ -601,6 +599,7 @@ static int drlink_fom_init(struct drlink_fom            *fom,
 	fom->df_svc  =  svc;
 	fom->df_tgt  = *tgt;
 	fom->df_wait_for_ack = wait_for_ack;
+	fom->df_parent_sm_id = m0_sm_id_get(&parent_fom->fo_sm_phase);
 
 	m0_co_context_init(&fom->df_co);
 	m0_co_op_init(&fom->df_co_op);
@@ -610,6 +609,13 @@ static int drlink_fom_init(struct drlink_fom            *fom,
 	return M0_RC(0);
 }
 
+static void drlink_fom_fini(struct m0_fom *fom)
+{
+	struct drlink_fom *df = fom2drlink_fom(fom);
+	m0_fop_put_lock(df->df_rfop);
+	m0_co_op_fini(&df->df_co_op);
+	m0_fom_fini(fom);
+}
 
 static void co_long_write_lock(struct m0_co_context *context,
 			       struct m0_long_lock *lk,
@@ -622,20 +628,6 @@ static void co_long_write_lock(struct m0_co_context *context,
 							     next_phase));
 	M0_CO_YIELD_RC(context, outcome);
 }
-
-/* FIXME: remove this after review */
-#if 0
-static void co_fom_co_op_wait(struct m0_co_context *context,
-			      struct m0_fom        *fom,
-			      struct m0_co_op      *op
-			      int                   next_phase)
-{
-	M0_CO_REENTER(context);
-	M0_CO_YIELD_RC(context,
-		       m0_co_op_tick_ret(op, fom, next_phase));
-	m0_co_op_reset(op);
-}
-#endif
 
 static void co_rpc_link_connect(struct m0_co_context *context,
 				struct m0_rpc_link *rlink,
@@ -755,12 +747,9 @@ static int find_or_add(struct m0_dtm0_service *dtms,
 enum drlink_fom_state {
 	DRF_INIT = M0_FOM_PHASE_INIT,
 	DRF_DONE = M0_FOM_PHASE_FINISH,
-	DRF_INITIALISED = M0_FOM_PHASE_NR,
-	DRF_LOCKING,
-	DRF_LOCKED,
-	DRF_TRYING_TO_CONNECT,
+	DRF_LOCKING = M0_FOM_PHASE_NR,
 	DRF_CONNECTING,
-	DRF_READY_TO_SEND,
+	DRF_SENDING,
 	DRF_WAITING_FOR_REPLY,
 	DRF_FAILED,
 	DRF_NR,
@@ -770,7 +759,7 @@ static struct m0_sm_state_descr drlink_fom_states[] = {
 	/* terminal states */
 	[DRF_INIT] = {
 		.sd_name      = "DRF_INIT",
-		.sd_allowed   = M0_BITS(DRF_INITIALISED, DRF_FAILED),
+		.sd_allowed   = M0_BITS(DRF_LOCKING, DRF_FAILED),
 		.sd_flags     = M0_SDF_INITIAL,
 	},
 	[DRF_DONE] = {
@@ -787,60 +776,28 @@ static struct m0_sm_state_descr drlink_fom_states[] = {
 	},
 
 	/* intermediate states */
-#define _ST(name, allowed)             \
+#define _ST(name, allowed)            \
 	[name] = {                    \
 		.sd_name    = #name,  \
 		.sd_allowed = allowed \
 	}
-	_ST(DRF_INITIALISED,       M0_BITS(DRF_LOCKING)),
-	_ST(DRF_LOCKING,           M0_BITS(DRF_LOCKED)),
-	_ST(DRF_LOCKED,            M0_BITS(DRF_TRYING_TO_CONNECT,
-					   DRF_READY_TO_SEND)),
-	_ST(DRF_TRYING_TO_CONNECT, M0_BITS(DRF_FAILED, DRF_CONNECTING)),
-	_ST(DRF_CONNECTING,        M0_BITS(DRF_FAILED, DRF_TRYING_TO_CONNECT,
-					   DRF_READY_TO_SEND)),
-	_ST(DRF_READY_TO_SEND,     M0_BITS(DRF_FAILED, DRF_WAITING_FOR_REPLY,
-					   DRF_DONE)),
-	_ST(DRF_WAITING_FOR_REPLY, M0_BITS(DRF_FAILED, DRF_DONE)),
+	_ST(DRF_LOCKING,           M0_BITS(DRF_CONNECTING,
+					   DRF_SENDING,
+					   DRF_FAILED)),
+	_ST(DRF_CONNECTING,        M0_BITS(DRF_SENDING,
+					   DRF_FAILED)),
+	_ST(DRF_SENDING,           M0_BITS(DRF_DONE,
+					   DRF_WAITING_FOR_REPLY,
+					   DRF_FAILED)),
+	_ST(DRF_WAITING_FOR_REPLY, M0_BITS(DRF_DONE,
+					   DRF_FAILED)),
 #undef _ST
-};
-
-static struct m0_sm_trans_descr drlink_fom_trans[] = {
-	{ "init-done",       M0_FOPH_INIT,          DRF_INITIALISED       },
-	{ "init-fail",       M0_FOPH_INIT,          DRF_FAILED            },
-	{ "lock-wait",       DRF_INITIALISED,       DRF_LOCKING           },
-	{ "lock-done",       DRF_LOCKING,           DRF_LOCKED            },
-	{ "first-conn-try",  DRF_LOCKED,            DRF_TRYING_TO_CONNECT },
-	{ "conn-already",    DRF_LOCKED,            DRF_READY_TO_SEND     },
-	{ "conn-wait",       DRF_TRYING_TO_CONNECT, DRF_CONNECTING        },
-	{ "conn-init-fail",  DRF_TRYING_TO_CONNECT, DRF_FAILED            },
-	{ "conn-fail",       DRF_CONNECTING,        DRF_FAILED            },
-#if 0
-	/* FIXME: Reconnects are supposed to be supported on the RPC level. */
-	{ "conn-retry",      DRF_CONNECTING,        DRF_TRYING_TO_CONNECT },
-#endif
-	{ "conn-active",     DRF_CONNECTING,        DRF_READY_TO_SEND     },
-	{ "send-fail",       DRF_READY_TO_SEND,     DRF_FAILED            },
-	{ "send-no-wait",    DRF_READY_TO_SEND,     DRF_DONE              },
-	{ "reply-wait",      DRF_READY_TO_SEND,     DRF_WAITING_FOR_REPLY },
-	{ "reply-fail",      DRF_WAITING_FOR_REPLY, DRF_FAILED            },
-#if 0
-	/*
-	 * FIXME: Reconnects caused by the lack of reply should not be
-	 * handled at this moment. But we may reconsider this after testing.
-	 */
-	{ "no-reply-reconn", DRF_WAITING_FOR_REPLY, DRF_TRYING_TO_CONNECT },
-#endif
-	{ "delivered",       DRF_WAITING_FOR_REPLY, DRF_DONE              },
-	{ "failed",          DRF_FAILED,            DRF_DONE              },
 };
 
 const static struct m0_sm_conf drlink_fom_conf = {
 	.scf_name      = "m0_dtm0_drlink_fom",
 	.scf_nr_states = ARRAY_SIZE(drlink_fom_states),
 	.scf_state     = drlink_fom_states,
-	.scf_trans_nr  = ARRAY_SIZE(drlink_fom_trans),
-	.scf_trans     = drlink_fom_trans
 };
 
 static struct drlink_fom *item2drlink_fom(struct m0_rpc_item *item)
@@ -890,7 +847,7 @@ static int dtm0_process_rlink_reinit(struct dtm0_process *proc,
 }
 
 static int dtm0_process_rlink_send(struct dtm0_process *proc,
-				   struct drlink_fom *drf)
+				   struct drlink_fom   *drf)
 {
 	struct m0_fop          *fop = drf->df_rfop;
 	struct m0_rpc_session  *session = &proc->dop_rlink.rlk_sess;
@@ -941,6 +898,29 @@ static enum dpr_state dpr_state_infer(struct dtm0_process *proc)
 	return DPR_TRANSIENT;
 }
 
+/*
+ * Establish a relation between a DTM message (carried by the RPC item),
+ * and a DTM RPC link FOM that was used to send this message:
+ *   DRLINK FOM <-> RPC item.
+ */
+static void drlink_addb_drf2item_relate(struct drlink_fom *drf)
+{
+	const struct m0_rpc_item *item = &drf->df_rfop->f_item;
+	M0_ADDB2_ADD(M0_AVI_FOM_TO_TX, m0_sm_id_get(&drf->df_gen.fo_sm_phase),
+		     m0_sm_id_get(&item->ri_sm));
+}
+
+/*
+ * Establish a relation between a FOM (for example, a CAS PUT FOM).
+ * and a DTM RPC link FOM that was created to send a DTM message:
+ *   FOM <-> DRLINK FOM.
+ */
+static void drlink_addb_drf2parent_relate(struct drlink_fom *drf)
+{
+	M0_ADDB2_ADD(M0_AVI_FOM_TO_TX, drf->df_parent_sm_id,
+		     m0_sm_id_get(&drf->df_gen.fo_sm_phase));
+}
+
 #define F M0_CO_FRAME_DATA
 static void drlink_coro_fom_tick(struct m0_co_context *context)
 {
@@ -954,6 +934,8 @@ static void drlink_coro_fom_tick(struct m0_co_context *context)
 		      struct dtm0_process       *proc;
 		      );
 
+	drlink_addb_drf2parent_relate(drf);
+
 	m0_mutex_lock(&drf->df_svc->dos_generic.rs_mutex);
 	rc = find_or_add(drf->df_svc, &drf->df_tgt, &F(proc));
 	/* Safety: assume that processes cannot be evicted. */
@@ -963,17 +945,14 @@ static void drlink_coro_fom_tick(struct m0_co_context *context)
 		goto out;
 
 	m0_long_lock_link_init(&F(llink), fom, &F(llock_addb2));
-	m0_fom_phase_set(fom, DRF_INITIALISED);
 
 	M0_CO_FUN(context, co_long_write_lock(context,
 					      &F(proc)->dop_llock,
 					      &F(llink),
 					      DRF_LOCKING));
 	M0_ASSERT(m0_long_is_write_locked(&F(proc)->dop_llock, fom));
-	m0_fom_phase_set(fom, DRF_LOCKED);
 
 	if (dpr_state_infer(F(proc)) == DPR_TRANSIENT) {
-		m0_fom_phase_set(fom, DRF_TRYING_TO_CONNECT);
 		rc = dtm0_process_rlink_reinit(F(proc), drf);
 		if (rc != 0)
 			goto unlock;
@@ -983,18 +962,18 @@ static void drlink_coro_fom_tick(struct m0_co_context *context)
 	}
 
 	if (dpr_state_infer(F(proc)) == DPR_FAILED)
-		goto unlock;
+			goto unlock;
 
-	m0_fom_phase_set(fom, DRF_READY_TO_SEND);
+	M0_ASSERT(dpr_state_infer(F(proc)) == DPR_ONLINE);
+	m0_fom_phase_set(fom, DRF_SENDING);
 	rc = dtm0_process_rlink_send(F(proc), drf);
 	if (rc != 0)
 		goto unlock;
 
+	/* Safety: FOP (and item) can be released only in ::drlink_fom_fini. */
+	drlink_addb_drf2item_relate(drf);
+
 	if (drf->df_wait_for_ack) {
-#if 0
-		M0_CO_FUN(context, co_fom_co_op_wait(context, fom, OP(fom),
-						     DRF_WAITING_FOR_REPLY));
-#endif
 		M0_CO_YIELD_RC(context,
 			       m0_co_op_tick_ret(&drf->df_co_op, fom,
 						 DRF_WAITING_FOR_REPLY));
@@ -1023,6 +1002,7 @@ static int drlink_fom_tick(struct m0_fom *fom)
 M0_INTERNAL int m0_dtm0_req_post(struct m0_dtm0_service    *svc,
 				 const struct dtm0_req_fop *req,
 				 const struct m0_fid       *tgt,
+				 const struct m0_fom       *parent_fom,
 				 bool                       wait_for_ack)
 {
 	int                  rc;
@@ -1034,7 +1014,7 @@ M0_INTERNAL int m0_dtm0_req_post(struct m0_dtm0_service    *svc,
 	if (fom == NULL)
 		return M0_ERR(-ENOMEM);
 
-	rc = drlink_fom_init(fom, svc, tgt, req, wait_for_ack);
+	rc = drlink_fom_init(fom, svc, tgt, req, parent_fom, wait_for_ack);
 	if (rc != 0) {
 		m0_free(fom);
 		return M0_ERR(rc);
@@ -1060,6 +1040,7 @@ static void m0_dtm0_rpc_link_mod_fini(void)
 M0_INTERNAL int m0_dtm0_req_post(struct m0_dtm0_service    *svc,
 				 const struct dtm0_req_fop *req,
 				 const struct m0_fid       *tgt,
+				 const struct m0_fom       *parent_fom,
 				 bool                       sync)
 {
 	(void) svc;
