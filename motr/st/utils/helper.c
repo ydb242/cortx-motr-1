@@ -117,16 +117,24 @@ static int alloc_vecs(struct m0_indexvec *ext, struct m0_bufvec *data,
 		m0_indexvec_free(ext);
 		return rc;
 	}
-	rc = m0_bufvec_alloc(attr, (block_count * block_size)/unit_sz, cs_sz);
+
+	if (unit_sz%block_size == 0) {
+		rc = m0_bufvec_alloc(attr, (block_count * block_size)/unit_sz, cs_sz);
+	}
+	else {
+		rc = m0_bufvec_empty_alloc(attr, block_count);
+	}
+
 	if (rc != 0) {
 		m0_indexvec_free(ext);
 		m0_bufvec_free(data);
 		return rc;
 	}
+
 	return rc;
 }
 
-static int write_dummy_hash_data(struct m0_uint128 id, struct m0_bufvec *attr, struct m0_bufvec *data)
+/*static int write_dummy_hash_data(struct m0_uint128 id, struct m0_bufvec *attr, struct m0_bufvec *data)
 {
 	int i;
 	int nr_unit;
@@ -143,7 +151,7 @@ static int write_dummy_hash_data(struct m0_uint128 id, struct m0_bufvec *attr, s
 	}
 	
 	return i;
-}
+}*/
 
 static void prepare_ext_vecs(struct m0_indexvec *ext,
 			     struct m0_bufvec *attr,
@@ -158,8 +166,6 @@ static void prepare_ext_vecs(struct m0_indexvec *ext,
 		*last_index += block_size;
 	}
 
-	for( i=0; i < attr->ov_vec.v_nr; i++) 
-		attr->ov_vec.v_count[i] = ATTR_SIZE;
 }
 
 static int alloc_prepare_vecs(struct m0_indexvec *ext,
@@ -357,6 +363,104 @@ init_error:
 	return rc;
 }
 
+int write_attributes(int usz, struct m0_uint128 id, struct m0_bufvec *data,
+		     struct m0_indexvec *ext, struct m0_bufvec *attr)
+{
+	struct m0_pi_seed seed;
+	struct m0_bufvec user_data = {};
+	int rc, count, i;
+	struct m0_md5_inc_context_pi pi;
+	struct m0_bufvec_cursor   datacur;
+	struct m0_bufvec_cursor   tmp_datacur;
+	struct m0_ivec_cursor     extcur;
+	uint32_t nr_seg;
+	int idx = 0;
+	m0_bcount_t bytes;
+
+	unsigned char *curr_context = NULL;
+
+	/* correct following */
+	m0_bufvec_cursor_init(&datacur, data);
+	m0_bufvec_cursor_init(&tmp_datacur, data);
+	m0_ivec_cursor_init(&extcur, ext);
+
+	curr_context = m0_alloc(sizeof(MD5_CTX));
+
+	while ( !m0_bufvec_cursor_move(&datacur, 0) &&
+		!m0_ivec_cursor_move(&extcur, 0))
+	{
+
+		/* calculate number of segments required for 1 data unit */
+		nr_seg = 0;
+		count = usz;
+		while (count > 0) {
+			nr_seg++;
+			bytes = m0_bufvec_cursor_step(&tmp_datacur);
+			if (bytes < count) {
+				m0_bufvec_cursor_move(&tmp_datacur, bytes);
+				count -= bytes;
+			}
+			else {
+				m0_bufvec_cursor_move(&tmp_datacur, count);
+				count = 0;
+			}
+		}
+		/* allocate an empty buf vec */
+		rc = m0_bufvec_empty_alloc(&user_data, nr_seg);
+		if (rc != 0) {
+			goto out;
+		}
+
+		/* populate the empty buf vec with data pointers
+		 * and create 1 data unit worth of buf vec
+		 */
+		i = 0;
+		count = usz;
+		while (count > 0) {
+			bytes = m0_bufvec_cursor_step(&datacur);
+			if (bytes < count) {
+				user_data.ov_vec.v_count[i] = bytes;
+				user_data.ov_buf[i] = m0_bufvec_cursor_addr(&datacur);
+				m0_bufvec_cursor_move(&datacur, bytes);
+				count -= bytes;
+			}
+			else {
+				user_data.ov_vec.v_count[i] = count;
+				user_data.ov_buf[i] = m0_bufvec_cursor_addr(&datacur);
+				m0_bufvec_cursor_move(&datacur, count);
+				count = 0;
+			}
+			i++;
+		}
+
+		seed.data_unit_offset = m0_ivec_cursor_index(&extcur)/usz;
+		m0_fid_set(&seed.obj_id, id.u_hi, id.u_lo);
+
+		memset(&pi, 0, sizeof(struct m0_md5_inc_context_pi));
+		pi.hdr.pi_type = M0_PI_TYPE_MD5_INC_CONTEXT;
+
+		rc = m0_client_calculate_pi((struct m0_generic_pi *)&pi,
+					    &seed, &user_data,
+				            M0_PI_CALC_UNIT_ZERO, curr_context, NULL);
+		if (rc != 0)
+			goto out;
+
+		M0_ASSERT(idx < attr->ov_vec.v_nr);
+
+		memcpy(attr->ov_buf[idx], (void *)&pi, sizeof(struct m0_md5_inc_context_pi));
+
+		idx++;
+		m0_ivec_cursor_move(&extcur, usz);
+
+		m0_bufvec_free2(&user_data);
+	}
+
+out:
+	m0_free(curr_context);
+	return rc;
+}
+
+
 int m0_write(struct m0_container *container, char *src,
 	     struct m0_uint128 id, uint32_t block_size,
 	     uint32_t block_count, uint64_t update_offset,
@@ -373,6 +477,8 @@ int m0_write(struct m0_container *container, char *src,
 	struct m0_client             *instance;
 	struct m0_rm_lock_req         req;
 	const struct m0_obj_lock_ops *lock_ops;
+	int usz;
+	bool cksum_enabled = false;
 	/* Open source file */
 	fp = fopen(src, "r");
 	if (fp == NULL)
@@ -403,11 +509,18 @@ int m0_write(struct m0_container *container, char *src,
 	if (blks_per_io == 0)
 		blks_per_io = M0_MAX_BLOCK_COUNT;
 
+	usz = m0_obj_layout_id_to_unit_size(obj.ob_attr.oa_layout_id);
+
 	rc = alloc_vecs(&ext, &data, &attr, blks_per_io, block_size,
-					m0_obj_layout_id_to_unit_size(obj.ob_attr.oa_layout_id),
-					ATTR_SIZE );
+					usz,
+					sizeof(struct m0_md5_inc_context_pi) );
 	if (rc != 0)
 		goto cleanup;
+
+	if (usz % block_size == 0) {
+		cksum_enabled = true;
+		M0_LOG(M0_DEBUG, "Checksums are enabled");
+	}
 
 	while (block_count > 0) {
 		bcount = (block_count > blks_per_io)?
@@ -428,7 +541,9 @@ int m0_write(struct m0_container *container, char *src,
 		/* Read data from source file. */
 		rc = read_data_from_file(fp, &data);
 		M0_ASSERT(rc == bcount);
-		write_dummy_hash_data(id, &attr, &data);
+		if (cksum_enabled) {
+			write_attributes(usz, id, &data, &ext, &attr);
+		}
 
 		/* Copy data to the object*/
 		rc = write_data_to_object(&obj, &ext, &data, &attr);
