@@ -641,6 +641,121 @@ M0_INTERNAL int m0_be_dtm0_plog_prune(struct m0_be_dtm0_log    *log,
 	return 0;
 }
 
+M0_INTERNAL void m0_be_dtm0_log_pmsg_post(struct m0_be_dtm0_log *log,
+					  struct m0_fop         *fop)
+{
+	struct m0_dtm0_log_rec       *rec;
+	struct dtm0_req_fop          *req = m0_fop_data(fop);
+	const struct m0_dtm0_tx_desc *txd = &req->dtr_txr;
+	bool                          is_persistent;
+
+	M0_PRE(log != NULL);
+	M0_PRE(!log->dl_is_persistent);
+	M0_PRE(fop->f_type == &dtm0_req_fop_fopt);
+	M0_PRE(m0_dtm0_tx_desc__invariant(txd));
+
+	M0_ENTRY();
+
+	m0_mutex_lock(&log->dl_lock);
+	rec = m0_be_dtm0_log_find(log, &txd->dtd_id);
+	/* TODO: We do not handle the case where a P msg is received before
+	 * the corresponding DTX enters INPROGRESS state.
+	 */
+	M0_ASSERT_INFO(rec != NULL, "Log record must be inserted into the log "
+		       "in m0_dtx0_close().");
+	is_persistent = m0_dtm0_tx_desc_state_eq(&rec->dlr_txd,
+						 M0_DTPS_PERSISTENT);
+	m0_mutex_unlock(&log->dl_lock);
+	/* NOTE: we do not need to hold the global mutex any longer
+	 * because of the following assumptions:
+	 * 1. Log record cannot be removed unless it is stable.
+	 *    We explicitly check that.
+	 * 2. The log record linkage is not shared with dtx_post_persistent,
+	 *    i.e. it should not try to remove or insert records.
+	 *    This point is not enforced.
+	 */
+	if (!is_persistent)
+		m0_dtm0_dtx_pmsg_post(&rec->dlr_dtx, fop);
+
+	M0_LEAVE();
+}
+
+static const struct m0_dtm0_tid dtm0_log_iter_tid0 =
+		(struct m0_dtm0_tid) { .dti_ts = { .dts_phys = ~0 } };
+
+static bool be_dtm0_log_iter_is_first(const struct m0_be_dtm0_log_iter *iter)
+{
+	return memcmp(&iter->dli_current_tid, &dtm0_log_iter_tid0,
+		      sizeof iter->dli_current_tid) == 0;
+}
+
+static bool be_dtm0_log_iter_invariant(const struct m0_be_dtm0_log_iter *iter)
+{
+	return _0C(m0_be_dtm0_log__invariant(iter->dli_log)) &&
+		(be_dtm0_log_iter_is_first(iter)
+		 ? _0C(true)
+		 : _0C(m0_dtm0_tid__invariant(&iter->dli_current_tid)));
+}
+
+M0_INTERNAL void m0_be_dtm0_log_iter_init(struct m0_be_dtm0_log_iter *iter,
+					  struct m0_be_dtm0_log      *log)
+{
+	iter->dli_log = log;
+	iter->dli_current_tid = dtm0_log_iter_tid0;
+	M0_POST(be_dtm0_log_iter_invariant(iter));
+}
+
+M0_INTERNAL void m0_be_dtm0_log_iter_fini(struct m0_be_dtm0_log_iter *iter)
+{
+	M0_POST(be_dtm0_log_iter_invariant(iter));
+}
+
+M0_INTERNAL int m0_be_dtm0_log_iter_next(struct m0_be_dtm0_log_iter *iter,
+					 struct m0_dtm0_log_rec	    *out)
+{
+	struct m0_dtm0_log_rec *rec;
+	int rc;
+
+	M0_PRE(m0_mutex_is_locked(&iter->dli_log->dl_lock));
+	M0_PRE(be_dtm0_log_iter_invariant(iter));
+	M0_ENTRY();
+
+	if (be_dtm0_log_iter_is_first(iter))
+		rec = iter->dli_log->dl_is_persistent
+			? lrec_be_list_head(iter->dli_log->u.dl_persist)
+			: lrec_tlist_head(iter->dli_log->u.dl_inmem);
+	else {
+		rec = m0_be_dtm0_log_find(iter->dli_log,
+					  &iter->dli_current_tid);
+		rec = iter->dli_log->dl_is_persistent
+			? lrec_be_list_next(iter->dli_log->u.dl_persist, rec)
+			: lrec_tlist_next(iter->dli_log->u.dl_inmem, rec);
+	}
+
+	if (rec != NULL) {
+		iter->dli_current_tid = rec->dlr_txd.dtd_id;
+		rc = m0_dtm0_log_rec_copy(out, rec);
+		if (rc != 0)
+			return M0_ERR(rc);
+	}
+
+	return M0_RC(rec == NULL ? 0 : +1);
+}
+
+M0_INTERNAL int m0_dtm0_log_rec_copy(struct m0_dtm0_log_rec       *dst,
+				     const struct m0_dtm0_log_rec *src)
+{
+	M0_SET0(dst);
+	return m0_dtm0_tx_desc_copy(&src->dlr_txd, &dst->dlr_txd) ?:
+		m0_buf_copy(&dst->dlr_payload, &src->dlr_payload);
+}
+
+M0_INTERNAL void m0_dtm0_log_iter_rec_fini(struct m0_dtm0_log_rec *rec)
+{
+	m0_dtm0_tx_desc_fini(&rec->dlr_txd);
+	m0_buf_free(&rec->dlr_payload);
+}
+
 #undef M0_TRACE_SUBSYSTEM
 
 /** @} end of dtm group */
