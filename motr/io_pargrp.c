@@ -644,9 +644,11 @@ static int pargrp_iomap_populate(struct pargrp_iomap      *map,
 						 buf_cursor);
 		m0_ivec_cursor_move_to(cursor, grpend);
 		M0_LOG(M0_ALWAYS,"Shipra: Read full parity group");
-	} else
+	} else {
+		M0_LOG(M0_ALWAYS,"Shipra: DO NOT Read full parity group");
 		rc = pargrp_iomap_populate_pi_ivec(map, cursor,
 						   buf_cursor, rmw);
+	}
 	if (rc != 0)
 		return M0_ERR_INFO(rc, "[%p] failed", ioo);
 
@@ -819,6 +821,7 @@ static int pargrp_iomap_seg_process(struct pargrp_iomap *map,
 
 		if (start < skip_buf_index) {
 			rc = map->pi_ops->pi_databuf_alloc(map, row, col, NULL);
+			M0_LOG(M0_DEBUG, "shipra: IO for non-read-verify mode");
 		} else {
 			/*
 			 * When setting with read_verify mode, it requires to
@@ -829,6 +832,7 @@ static int pargrp_iomap_seg_process(struct pargrp_iomap *map,
 			 * internally. So set buf_cursor to NULL when the cursor
 			 * reaches the end of application's buffer.
 			 */
+			M0_LOG(M0_DEBUG, "shipra: IO for read-verify mode");
 			if (buf_cursor && m0_bufvec_cursor_move(buf_cursor, 0))
 				buf_cursor = NULL;
 			rc = map->pi_ops->pi_databuf_alloc(map, row, col,
@@ -836,7 +840,7 @@ static int pargrp_iomap_seg_process(struct pargrp_iomap *map,
 			if (rc == 0 && buf_cursor)
 				m0_bufvec_cursor_move(buf_cursor, count);
 		}
-		M0_LOG(M0_DEBUG, "alloc start=%8"PRIu64" count=%4"PRIu64
+		M0_LOG(M0_DEBUG, "shipra: alloc start=%8"PRIu64" count=%4"PRIu64
 			" grpid=%3"PRIu64" row=%u col=%u f=0x%x addr=%p",
 			 start, count, map->pi_grpid, row, col, flags,
 			 map->pi_databufs[row][col] ?
@@ -1351,8 +1355,8 @@ static int pargrp_iomap_paritybufs_alloc(struct pargrp_iomap *map)
 					      PA_NONE);
 				ptr += obj_buffer_size(obj);
 
-				M0_LOG(M0_DEBUG, "shipra: row=%d col=%d dbuf=%p pbuf=%p ptr=%p",
-				       row, col, dbuf, pbuf, ptr);
+				/*M0_LOG(M0_DEBUG, "row=%d col=%d dbuf=%p pbuf=%p ptr=%p",
+				       row, col, dbuf, pbuf, ptr);*/
 
 				if (M0_IN(op_code, (M0_OC_WRITE,
 						    M0_OC_FREE)))
@@ -1362,7 +1366,6 @@ static int pargrp_iomap_paritybufs_alloc(struct pargrp_iomap *map)
 				    (op_code == M0_OC_READ &&
 				     instance->m0c_config->mc_is_read_verify)) {
 					dbuf->db_flags |= PA_READ;
-					M0_LOG(M0_ALWAYS, "shipra: dbflags the PA_read");
 				}
 			}
 		}

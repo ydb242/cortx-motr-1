@@ -556,7 +556,7 @@ static void target_ioreq_seg_add(struct target_ioreq              *ti,
 		pattr = ti->ti_dgvec->dr_pageattrs;
 		cnt = page_nr(ioo->ioo_iomap_nr * layout_unit_size(play) *
 		      (layout_n(play) + layout_k(play)), ioo->ioo_obj);
-		M0_LOG(M0_DEBUG, "map_nr=%"PRIu64" req state=%u cnt=%"PRIu64,
+		M0_LOG(M0_DEBUG, "shipra:map_nr=%"PRIu64" req state=%u count includes parity cnt=%"PRIu64,
 				 ioo->ioo_iomap_nr, ioreq_sm_state(ioo), cnt);
 	} else {
 		ivec  = &ti->ti_ivec;
@@ -568,7 +568,7 @@ static void target_ioreq_seg_add(struct target_ioreq              *ti,
 		pattr = ti->ti_pageattrs;
 		cnt = page_nr(ioo->ioo_iomap_nr * layout_unit_size(play) *
 			      layout_n(play), ioo->ioo_obj);
-		M0_LOG(M0_DEBUG, "map_nr=%"PRIu64" req state=%u cnt=%"PRIu64,
+		M0_LOG(M0_DEBUG, "shipra: map_nr=%"PRIu64" req state=%u cnt=%"PRIu64,
 				 ioo->ioo_iomap_nr, ioreq_sm_state(ioo), cnt);
 	}
 
@@ -591,12 +591,12 @@ static void target_ioreq_seg_add(struct target_ioreq              *ti,
 			buf = map->pi_databufs[row][col];
 
 			pattr[seg] |= PA_DATA;
-			M0_LOG(M0_DEBUG, "Data seg %u added", seg);
+			M0_LOG(M0_DEBUG, "shipra:Data seg %u added", seg);
 		} else {
 			buf = map->pi_paritybufs[page_id(goff, ioo->ioo_obj)]
 			[unit - layout_n(play)];
 			pattr[seg] |= PA_PARITY;
-			M0_LOG(M0_DEBUG, "Parity seg %u added", seg);
+			M0_LOG(M0_DEBUG, "shipra:Parity seg %u added", seg);
 		}
 		buf->db_tioreq = ti;
 		if (buf->db_flags & PA_WRITE)
@@ -1379,7 +1379,7 @@ static int nw_xfer_tioreq_get(struct nw_xfer_request *xfer,
 		rc = target_ioreq_init(ti, xfer, fid, ta_obj, session, size);
 		if (rc == 0) {
 			tioreqht_htable_add(&xfer->nxr_tioreqs_hash, ti);
-			M0_LOG(M0_INFO, "New target_ioreq %p added for "FID_F,
+			M0_LOG(M0_INFO, "shipra: New target_ioreq %p added for "FID_F,
 			                ti, FID_P(fid));
 		} else {
 			m0_free(ti);
@@ -1552,6 +1552,7 @@ static int nw_xfer_io_distribute(struct nw_xfer_request *xfer)
 				databufs_set_dgw_mode(iomap, play, &r_ext);
 
 			src.sa_unit = unit;
+			M0_LOG(M0_DEBUG, "shipra: process data units, unit number %"PRIu64, src.sa_unit);
 			rc = xfer->nxr_ops->nxo_tioreq_map(xfer, &src, &tgt,
 							   &ti);
 			if (rc != 0)
@@ -1574,12 +1575,13 @@ static int nw_xfer_io_distribute(struct nw_xfer_request *xfer)
 					       M0_PBUF_IND)) ||
 		    (ioreq_sm_state(ioo) == IRS_DEGRADED_READING &&
 		     iomap->pi_state == PI_DEGRADED)) {
-			M0_LOG(M0_DEBUG, "shipra: process parity units");
 
 			for (unit = 0; unit < layout_k(play); ++unit) {
 				src.sa_unit = layout_n(play) + unit;
 				M0_ASSERT(m0_pdclust_unit_classify(play,
 					  src.sa_unit) == M0_PUT_PARITY);
+
+				M0_LOG(M0_DEBUG, "shipra: process parity units, unit number %"PRIu64, src.sa_unit);
 
 				rc = xfer->nxr_ops->nxo_tioreq_map(xfer, &src,
 								   &tgt, &ti);
@@ -2061,7 +2063,7 @@ static int nw_xfer_tioreq_map(struct nw_xfer_request           *xfer,
 	spare = *src;
 	m0_fd_fwd_map(play_instance, src, tgt);
 	tfid = target_fid(ioo, tgt);
-	M0_LOG(M0_DEBUG, "src_id[%"PRIu64":%"PRIu64"] -> "
+	M0_LOG(M0_DEBUG, "shipra:src_id[%"PRIu64":%"PRIu64"] -> "
 			 "dest_id[%"PRIu64":%"PRIu64"] @ tfid="FID_F,
 	       src->sa_group, src->sa_unit, tgt->ta_frame, tgt->ta_obj,
 	       FID_P(&tfid));
