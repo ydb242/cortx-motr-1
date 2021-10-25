@@ -770,7 +770,7 @@ M0_INTERNAL int ioreq_fop_dgmode_read(struct ioreq_fop *irfop)
 				else
 					break;
 			}
-
+			M0_LOG(M0_ALWAYS,"shipra: grpid for degraded read %"PRIu64, grpid);
 			ioreq_pgiomap_find(ioo, grpid, &pgcur, &map);
 			M0_ASSERT(map != NULL);
 			rc = map->pi_ops->pi_dgmode_process(map,
