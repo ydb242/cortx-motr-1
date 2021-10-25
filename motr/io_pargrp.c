@@ -622,7 +622,7 @@ static int pargrp_iomap_populate(struct pargrp_iomap      *map,
 	    !m0_pdclust_is_replicated(play))
 		rmw = true;
 
-	M0_ENTRY("[%p] map=%p grp=%"PRIu64" [%"PRIu64",+%"PRIu64") rmw=%d",
+	M0_ENTRY("shipra: [%p] map=%p grp=%"PRIu64" [%"PRIu64",+%"PRIu64") rmw=%d",
 		 ioo, map, map->pi_grpid, grpstart, grpsize, !!rmw);
 
 	if (op->op_code == M0_OC_FREE && rmw)
@@ -643,6 +643,7 @@ static int pargrp_iomap_populate(struct pargrp_iomap      *map,
 						 m0_ivec_cursor_index(cursor),
 						 buf_cursor);
 		m0_ivec_cursor_move_to(cursor, grpend);
+		M0_LOG(M0_ALWAYS,"Shipra: Read full parity group");
 	} else
 		rc = pargrp_iomap_populate_pi_ivec(map, cursor,
 						   buf_cursor, rmw);
@@ -1310,7 +1311,7 @@ static int pargrp_iomap_paritybufs_alloc(struct pargrp_iomap *map)
 	uint32_t                  i;
 	struct data_buf          *buf;
 
-	M0_ENTRY("[%p] map %p", map->pi_ioo, map);
+	M0_ENTRY("shipra: [%p] map %p", map->pi_ioo, map);
 
 	M0_PRE_EX(pargrp_iomap_invariant(map));
 	obj = map->pi_ioo->ioo_obj;
@@ -1350,7 +1351,7 @@ static int pargrp_iomap_paritybufs_alloc(struct pargrp_iomap *map)
 					      PA_NONE);
 				ptr += obj_buffer_size(obj);
 
-				M0_LOG(M0_DEBUG, "row=%d col=%d dbuf=%p pbuf=%p ptr=%p",
+				M0_LOG(M0_DEBUG, "shipra: row=%d col=%d dbuf=%p pbuf=%p ptr=%p",
 				       row, col, dbuf, pbuf, ptr);
 
 				if (M0_IN(op_code, (M0_OC_WRITE,
@@ -1359,8 +1360,10 @@ static int pargrp_iomap_paritybufs_alloc(struct pargrp_iomap *map)
 
 				if (map->pi_rtype == PIR_READOLD ||
 				    (op_code == M0_OC_READ &&
-				     instance->m0c_config->mc_is_read_verify))
+				     instance->m0c_config->mc_is_read_verify)) {
 					dbuf->db_flags |= PA_READ;
+					M0_LOG(M0_ALWAYS, "shipra: dbflags the PA_read");
+				}
 			}
 		}
 	}
@@ -1466,7 +1469,7 @@ static int pargrp_iomap_pages_mark_as_failed(struct pargrp_iomap       *map,
 
 	M0_PRE(map != NULL);
 	M0_PRE(M0_IN(type, (M0_PUT_DATA, M0_PUT_PARITY)));
-	M0_ENTRY("[%p] map %p", map->pi_ioo, map);
+	M0_ENTRY("Shipra: [%p] map %p", map->pi_ioo, map);
 
 	ioo = map->pi_ioo;
 	play = pdlayout_get(ioo);
@@ -1643,7 +1646,7 @@ static void mark_page_as_read_failed(struct pargrp_iomap *map, uint32_t row,
 	M0_PRE(ergo(page_type == PA_PARITY,
 		    map->pi_paritybufs[row][col] != NULL));
 
-	M0_ENTRY("pid=%"PRIu64", row = %u, col=%u, type=0x%x",
+	M0_ENTRY("shipra: pid=%"PRIu64", row = %u, col=%u, type=0x%x",
 		 map->pi_grpid, row, col, page_type);
 
 	play = pdlayout_get(map->pi_ioo);
@@ -1837,7 +1840,7 @@ static int pargrp_iomap_dgmode_postprocess(struct pargrp_iomap *map)
 	 *              data lies within file size. Parity also has to be read.
 	 */
 	M0_PRE_EX(map != NULL && pargrp_iomap_invariant(map));
-	M0_ENTRY("parity group id %3"PRIu64", map state = %d",
+	M0_ENTRY("shipra: parity group id %3"PRIu64", map state = %d",
 		 map->pi_grpid, map->pi_state);
 
 	ioo = map->pi_ioo;
@@ -1910,14 +1913,18 @@ static int pargrp_iomap_dgmode_postprocess(struct pargrp_iomap *map)
 	 * m0_0vec requires all members except the last one to have data count
 	 * multiple of 4K.
 	 */
+
+	M0_LOG(M0_ALWAYS,"shipra:Reading the entire parity group");
 	COUNT(&map->pi_ivec, 0) = round_up(COUNT(&map->pi_ivec, 0),
 					   m0__page_size(ioo));
 	SEG_NR(&map->pi_ivec)   = 1;
-	/*indexvec_dump(&map->pi_ivec);*/
+	//indexvec_dump(&map->pi_ivec);
 
 	/* parity matrix from parity group. */
 	for (row = 0; row < rows_nr(play, obj); ++row) {
 		for (col = 0; col < layout_k(play); ++col) {
+
+			M0_LOG(M0_DEBUG, "shipra: row = %u, col=%u", row, col);
 
 			if (map->pi_paritybufs[row][col] == NULL) {
 				map->pi_paritybufs[row][col] =
@@ -2125,7 +2132,7 @@ static int pargrp_iomap_replica_elect(struct pargrp_iomap *map)
 	struct m0_key_val        *mjr;
 	uint32_t                  unit_id;
 
-	M0_ENTRY("map = %p", map);
+	M0_ENTRY("shipra:map = %p", map);
 	M0_PRE_EX(map != NULL && pargrp_iomap_invariant(map));
 
 	ioo = map->pi_ioo;
@@ -2305,8 +2312,8 @@ static int pargrp_iomap_parity_verify(struct pargrp_iomap *map)
 				rc = M0_ERR(-EIO);
 				goto last;
 			}
-			M0_LOG(M0_DEBUG,
-			       "parity verified for %"PRIu64" [%u:%u]",
+			M0_LOG(M0_ALWAYS,
+			       "shipra:parity verified for %"PRIu64" [%u:%u]",
 			       map->pi_grpid, row, col);
 		}
 	}

@@ -873,7 +873,7 @@ static int target_ioreq_iofops_prepare(struct target_ioreq *ti,
 	uint32_t                     segnext;
 	uint32_t                     ndom_max_segs;
 
-	M0_ENTRY("prepare io fops for target ioreq %p filter 0x%x, tfid "FID_F,
+	M0_ENTRY("shipra: prepare io fops for target ioreq %p filter 0x%x, tfid "FID_F,
 		 ti, filter, FID_P(&ti->ti_fid));
 
 	M0_PRE(target_ioreq_invariant(ti));
@@ -1522,8 +1522,8 @@ static int nw_xfer_io_distribute(struct nw_xfer_request *xfer)
 		pgstart      = data_size(play) * iomap->pi_grpid;
 		src.sa_group = iomap->pi_grpid;
 
-		M0_LOG(M0_DEBUG, "xfer=%p map=%p [grpid=%"PRIu64" state=%u]",
-				 xfer, iomap, iomap->pi_grpid, iomap->pi_state);
+		M0_LOG(M0_ALWAYS, "shipra: xfer=%p map=%p [grpid=%"PRIu64" state=%u] op_code %u",
+				 xfer, iomap, iomap->pi_grpid, iomap->pi_state, op_code);
 
 		if (do_cobs)
 			m0_bitmap_reset(&units_spanned);
@@ -1574,6 +1574,7 @@ static int nw_xfer_io_distribute(struct nw_xfer_request *xfer)
 					       M0_PBUF_IND)) ||
 		    (ioreq_sm_state(ioo) == IRS_DEGRADED_READING &&
 		     iomap->pi_state == PI_DEGRADED)) {
+			M0_LOG(M0_DEBUG, "shipra: process parity units");
 
 			for (unit = 0; unit < layout_k(play); ++unit) {
 				src.sa_unit = layout_n(play) + unit;
@@ -1614,6 +1615,8 @@ static int nw_xfer_io_distribute(struct nw_xfer_request *xfer)
 			for (unit = 0; unit < m0_pdclust_size(play); ++unit) {
 				if (m0_bitmap_get(&units_spanned, unit))
 					continue;
+
+				M0_LOG(M0_ALWAYS, "shipra: cobs created for unspanned units %"PRIu64, unit);
 
 				src.sa_unit = unit;
 				rc = xfer->nxr_ops->nxo_tioreq_map(xfer, &src,
@@ -1925,6 +1928,7 @@ out:
 		M0_ASSERT(op->op_code == M0_OC_READ &&
 			  instance->m0c_config->mc_is_read_verify);
 		ioreq_sm_state_set_locked(ioo, IRS_READ_COMPLETE);
+		M0_LOG(M0_ALWAYS, "shipra: no fops dispatched because of parity verify");
 	} else if (rc == 0)
 		xfer->nxr_state = NXS_INFLIGHT;
 

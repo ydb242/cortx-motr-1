@@ -401,7 +401,7 @@ static void ioreq_iosm_handle_launch(struct m0_sm_group *grp,
 		}
 	}
 out:
-	M0_LOG(M0_INFO, "nxr_bytes = %"PRIu64", copied_nr = %"PRIu64,
+	M0_LOG(M0_INFO, "shipra: nxr_bytes = %"PRIu64", copied_nr = %"PRIu64,
 	       ioo->ioo_nwxfer.nxr_bytes, ioo->ioo_copied_nr);
 
 	/* lock this as it isn't a locality group lock */
@@ -515,8 +515,11 @@ static void ioreq_iosm_handle_executed(struct m0_sm_group *grp,
 
 			if ((op->op_code == M0_OC_READ &&
 			     instance->m0c_config->mc_is_read_verify) &&
-			     ioo->ioo_dgmap_nr > 0)
+			     ioo->ioo_dgmap_nr > 0) {
+
+				M0_LOG(M0_ALWAYS,"Shipra: M0_OC_READ mc_is_read_verify ioo_dgmap_nr %u", ioo->ioo_dgmap_nr);
 				rc = ioo->ioo_ops->iro_dgmode_recover(ioo);
+			}
 
 			/* Valid data are available now, copy to application */
 			rc = ioo->ioo_ops->iro_application_data_copy(ioo,
@@ -1526,8 +1529,10 @@ static int ioreq_dgmode_read(struct m0_op_io *ioo, bool rmw)
 		 * only if one or more devices were in FAILED, OFFLINE,
 		 * REPAIRING state.
 		 */
-		if (ioo->ioo_dgmap_nr > 0)
+		if (ioo->ioo_dgmap_nr > 0) {
+			M0_LOG(M0_ALWAYS,"shipra: Recovers lost data using parity recovery algorithms");
 			rc = ioo->ioo_ops->iro_dgmode_recover(ioo);
+		}
 
 		return M0_RC(rc);
 	}
@@ -1593,14 +1598,14 @@ static int ioreq_dgmode_read(struct m0_op_io *ioo, bool rmw)
 	if (rc != 0)
 		return M0_ERR_INFO(rc, "[%p] dgmode failed", ioo);
 
-	M0_LOG(M0_DEBUG, "[%p] dgmap_nr=%u is in dgmode",
+	M0_LOG(M0_ALWAYS, "shipra: [%p] dgmap_nr=%u is in dgmode",
 			 ioo, ioo->ioo_dgmap_nr);
 	/*
 	 * Starts processing the pages again if any of the parity groups
 	 * spanned by input IO-request is in degraded mode.
 	 */
 	if (ioo->ioo_dgmap_nr > 0) {
-		M0_LOG(M0_WARN, "Process failed parity groups in dgmode/read "
+		M0_LOG(M0_WARN, "Shipra: Process failed parity groups in dgmode/read "
 				"ioo=%p dgmap_nr=%u",
 				ioo, ioo->ioo_dgmap_nr);
 		if (ioreq_sm_state(ioo) == IRS_READ_COMPLETE)
@@ -1680,6 +1685,8 @@ static int ioreq_dgmode_write(struct m0_op_io *ioo, bool rmw)
 	rc = device_check(ioo);
 	if (rc < 0)
 		return M0_RC(rc);
+
+	M0_LOG(M0_ALWAYS, "shipra: doing dgmode write rmw %d", rmw?1:0);
 
 	/*
 	 * This IO request has already acquired distributed lock on the
