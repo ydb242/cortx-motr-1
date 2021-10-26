@@ -1078,8 +1078,10 @@ static int target_ioreq_iofops_prepare(struct target_ioreq *ti,
 		 * degraded read expects zero-filled units from server side.
 		 */
 		if (ioreq_sm_state(ioo) != IRS_DEGRADED_READING &&
-		    ioo->ioo_flags & M0_OOF_NOHOLE)
+		    ioo->ioo_flags & M0_OOF_NOHOLE) {
+			M0_LOG(M0_ALWAYS, "shipra: setting M0_IO_FLAG_NOHOLE sm_state %"PRIu32, ioreq_sm_state(ioo));
 			rw_fop->crw_flags |= M0_IO_FLAG_NOHOLE;
+		}
 
 		/* Assign the checksum buffer for traget */
 		if (filter == PA_DATA && ioo->ioo_attr.ov_vec.v_nr) {
