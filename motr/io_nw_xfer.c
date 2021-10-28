@@ -1558,7 +1558,7 @@ static int nw_xfer_io_distribute(struct nw_xfer_request *xfer)
 				databufs_set_dgw_mode(iomap, play, &r_ext);
 
 			src.sa_unit = unit;
-			M0_LOG(M0_DEBUG, "shipra: process data units, unit number %"PRIu64" grpid %"PRIu64, src.sa_unit, iomap->pi_grpid);
+			M0_LOG(M0_DEBUG, "shipra: process data units, unit number %"PRIu64" do_cobs %d opcode %u req_type %d", src.sa_unit, do_cobs ? 1:0, op_code, ti->ti_req_type);
 			rc = xfer->nxr_ops->nxo_tioreq_map(xfer, &src, &tgt,
 							   &ti);
 			if (rc != 0)
