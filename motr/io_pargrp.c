@@ -455,6 +455,7 @@ static int pargrp_iomap_populate_pi_ivec(struct pargrp_iomap     *map,
 					      m0_ivec_cursor_index(cursor),
 					      m0_ivec_cursor_step(cursor))) {
 			count = m0_ivec_cursor_step(cursor);
+			M0_LOG(M0_DEBUG, "shipra:This segment is fully spanned, skip it");
 			continue;
 		}
 
@@ -477,7 +478,7 @@ static int pargrp_iomap_populate_pi_ivec(struct pargrp_iomap     *map,
 
 		++map->pi_ivec.iv_vec.v_nr;
 
-		M0_LOG(M0_DEBUG, "[%p] pre grp_id=%"PRIu64" seg=%"PRIu32
+		M0_LOG(M0_DEBUG, "shipra: [%p] pre grp_id=%"PRIu64" seg=%"PRIu32
 		       " =[%"PRIu64",+%"PRIu64")", map->pi_ioo, map->pi_grpid,
 		       seg, INDEX(&map->pi_ivec, seg),
 		            COUNT(&map->pi_ivec, seg));
@@ -488,14 +489,14 @@ static int pargrp_iomap_populate_pi_ivec(struct pargrp_iomap     *map,
 
 		seg_align(map, seg, seg_end, pagesize);
 
-		M0_LOG(M0_DEBUG, "[%p] post grp_id=%"PRIu64" seg=%"PRIu32
+		M0_LOG(M0_DEBUG, "shipra:[%p] post grp_id=%"PRIu64" seg=%"PRIu32
 				 " =[%"PRIu64",+%"PRIu64")", map->pi_ioo,
 				 map->pi_grpid, seg,
 				 INDEX(&map->pi_ivec, seg),
 				 COUNT(&map->pi_ivec, seg));
 
 		count = seg_end - m0_ivec_cursor_index(cursor);
-		M0_LOG(M0_DEBUG, "[%p] cursor advance +%"PRIu64" from %"PRIu64,
+		M0_LOG(M0_DEBUG, "shipra: [%p] cursor advance +%"PRIu64" from %"PRIu64,
 		       map->pi_ioo, count, m0_ivec_cursor_index(cursor));
 		++seg;
 	}
@@ -547,6 +548,7 @@ static int pargrp_iomap_select_ro_rr(struct pargrp_iomap *map,
 	 */
 	uint64_t rr_pages_nr = data_pages_nr -
 	                       map->pi_ops->pi_fullpages_find(map);
+	M0_LOG(M0_ALWAYS, "shipra: data page number %"PRIu64" parity page number %"PRIu64, data_pages_nr, parity_pages_nr);
 
 	if (rr_pages_nr < ro_pages_nr || map->pi_trunc_partial) {
 		M0_LOG(M0_DEBUG, "[%p]: RR selected", map->pi_ioo);
@@ -619,8 +621,11 @@ static int pargrp_iomap_populate(struct pargrp_iomap      *map,
 	if (M0_IN(op->op_code, (M0_OC_FREE, M0_OC_WRITE)) &&
 	    (m0_ivec_cursor_index(cursor) > grpstart ||
 	     m0_ivec_cursor_conti(cursor, grpend) < grpend) &&
-	    !m0_pdclust_is_replicated(play))
+	    !m0_pdclust_is_replicated(play)) {
+
+		M0_LOG(M0_ALWAYS, "shipra:curxor_index %"PRIu64" grpstart %"PRIu64" cursor_conti %"PRIu64" grpend %"PRIu64, m0_ivec_cursor_index(cursor), grpstart, m0_ivec_cursor_conti(cursor, grpend), grpend);
 		rmw = true;
+	}
 
 	M0_ENTRY("shipra: [%p] map=%p grp=%"PRIu64" [%"PRIu64",+%"PRIu64") rmw=%d",
 		 ioo, map, map->pi_grpid, grpstart, grpsize, !!rmw);
@@ -643,9 +648,7 @@ static int pargrp_iomap_populate(struct pargrp_iomap      *map,
 						 m0_ivec_cursor_index(cursor),
 						 buf_cursor);
 		m0_ivec_cursor_move_to(cursor, grpend);
-		M0_LOG(M0_ALWAYS,"Shipra: Read full parity group");
 	} else {
-		M0_LOG(M0_ALWAYS,"Shipra: DO NOT Read full parity group");
 		rc = pargrp_iomap_populate_pi_ivec(map, cursor,
 						   buf_cursor, rmw);
 	}
@@ -821,7 +824,6 @@ static int pargrp_iomap_seg_process(struct pargrp_iomap *map,
 
 		if (start < skip_buf_index) {
 			rc = map->pi_ops->pi_databuf_alloc(map, row, col, NULL);
-			M0_LOG(M0_DEBUG, "shipra: IO for non-read-verify mode");
 		} else {
 			/*
 			 * When setting with read_verify mode, it requires to
@@ -832,7 +834,6 @@ static int pargrp_iomap_seg_process(struct pargrp_iomap *map,
 			 * internally. So set buf_cursor to NULL when the cursor
 			 * reaches the end of application's buffer.
 			 */
-			M0_LOG(M0_DEBUG, "shipra: IO for read-verify mode");
 			if (buf_cursor && m0_bufvec_cursor_move(buf_cursor, 0))
 				buf_cursor = NULL;
 			rc = map->pi_ops->pi_databuf_alloc(map, row, col,
@@ -840,11 +841,11 @@ static int pargrp_iomap_seg_process(struct pargrp_iomap *map,
 			if (rc == 0 && buf_cursor)
 				m0_bufvec_cursor_move(buf_cursor, count);
 		}
-		M0_LOG(M0_DEBUG, "shipra: alloc start=%8"PRIu64" count=%4"PRIu64
+		/*M0_LOG(M0_DEBUG, "shipra: alloc start=%8"PRIu64" count=%4"PRIu64
 			" grpid=%3"PRIu64" row=%u col=%u f=0x%x addr=%p",
 			 start, count, map->pi_grpid, row, col, flags,
 			 map->pi_databufs[row][col] ?
-			 map->pi_databufs[row][col]->db_buf.b_addr : NULL);
+			 map->pi_databufs[row][col]->db_buf.b_addr : NULL); */
 		if (rc != 0)
 			goto err;
 
@@ -974,6 +975,7 @@ static int pargrp_iomap_readold_auxbuf_alloc(struct pargrp_iomap *map)
 	m0_bindex_t               grp_size;
 	struct m0_pdclust_layout *play;
 	uint64_t                  pagesize;
+	int total = 0;
 
 	M0_ENTRY("map %p", map);
 
@@ -1020,8 +1022,12 @@ static int pargrp_iomap_readold_auxbuf_alloc(struct pargrp_iomap *map)
 			rc = pargrp_iomap_auxbuf_alloc(map, row, col);
 			if (rc != 0)
 				return M0_ERR(rc);
+
+			total++;
 		}
 	}
+
+	M0_LOG(M0_ALWAYS, "shipra: total bufs allocated %d", total);
 
 	return M0_RC(rc);
 }
@@ -1101,6 +1107,7 @@ static int pargrp_iomap_readrest(struct pargrp_iomap *map)
 	struct m0_op_io          *ioo;
 	struct m0_pdclust_layout *play;
 	uint64_t                  pagesize;
+	int total = 0;
 
 	M0_ENTRY("map %p", map);
 
@@ -1150,8 +1157,11 @@ static int pargrp_iomap_readrest(struct pargrp_iomap *map)
 
 			/* see comments in readold_xxx above */
 			map->pi_databufs[row][col]->db_flags |= PA_READ;
+			total++;
 		}
 	}
+
+	M0_LOG(M0_ALWAYS,"shipra: total number of data bufs allocated %d", total);
 
 	return M0_RC(0);
 }
@@ -2401,7 +2411,7 @@ M0_INTERNAL int pargrp_iomap_init(struct pargrp_iomap  *map,
 	struct m0_client         *instance;
 	struct m0_op             *op;
 
-	M0_ENTRY("map = %p, op_io = %p, grpid = %"PRIu64, map, ioo, grpid);
+	M0_ENTRY("shipra:map = %p, op_io = %p, grpid = %"PRIu64, map, ioo, grpid);
 
 	M0_PRE(map != NULL);
 	M0_PRE(ioo != NULL);

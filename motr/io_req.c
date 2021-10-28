@@ -792,7 +792,7 @@ static int ioreq_iomaps_parity_groups_cal(struct m0_op_io *ioo)
 	/* Array of maximum possible number of groups spanned by req. */
 	grparray_sz = m0_vec_count(&ioo->ioo_ext.iv_vec) / data_size(play) +
 		      2 * SEG_NR(&ioo->ioo_ext);
-	M0_LOG(M0_DEBUG, "ioo=%p arr_sz=%"PRIu64, ioo, grparray_sz);
+	M0_LOG(M0_DEBUG, "shipra: ioo=%p arr_sz=%"PRIu64" Parity group number before calculating %"PRIu64, ioo, grparray_sz, ioo->ioo_iomap_nr);
 	M0_ALLOC_ARR(grparray, grparray_sz);
 	if (grparray == NULL)
 		return M0_ERR_INFO(-ENOMEM, "Failed to allocate memory"
@@ -805,6 +805,7 @@ static int ioreq_iomaps_parity_groups_cal(struct m0_op_io *ioo)
 		grpstart = group_id(INDEX(&ioo->ioo_ext, seg), data_size(play));
 		grpend	 = group_id(seg_endpos(&ioo->ioo_ext, seg) - 1,
 				    data_size(play));
+		M0_LOG(M0_DEBUG, "shipra: grpstart %"PRIu64" grpend %"PRIu64" data size %"PRIu64" unit size %"PRIu64, grpstart, grpend, data_size(play), layout_unit_size(play));
 		for (grp = grpstart; grp <= grpend; ++grp) {
 			uint64_t i;
 			/*
@@ -823,6 +824,7 @@ static int ioreq_iomaps_parity_groups_cal(struct m0_op_io *ioo)
 					i , grparray_sz);
 				grparray[i] = grp;
 				++ioo->ioo_iomap_nr;
+				M0_LOG(M0_DEBUG, "shipra: New group i %"PRIu64" grp %"PRIu64, i, grp);
 			}
 		}
 	}
@@ -926,7 +928,7 @@ static int ioreq_iomaps_prepare(struct m0_op_io *ioo)
 						bufvec ? &buf_cursor : NULL);
 		if (rc != 0)
 			goto failed;
-		M0_LOG(M0_INFO, "iomap_id=%"PRIu64" is populated",
+		M0_LOG(M0_ALWAYS, "shipra: iomap_id=%"PRIu64" is populated",
 		       iomap->pi_grpid);
 	}
 

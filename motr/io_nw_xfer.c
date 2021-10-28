@@ -1558,7 +1558,7 @@ static int nw_xfer_io_distribute(struct nw_xfer_request *xfer)
 				databufs_set_dgw_mode(iomap, play, &r_ext);
 
 			src.sa_unit = unit;
-			M0_LOG(M0_DEBUG, "shipra: process data units, unit number %"PRIu64, src.sa_unit);
+			M0_LOG(M0_DEBUG, "shipra: process data units, unit number %"PRIu64" grpid %"PRIu64, src.sa_unit, iomap->pi_grpid);
 			rc = xfer->nxr_ops->nxo_tioreq_map(xfer, &src, &tgt,
 							   &ti);
 			if (rc != 0)
@@ -1587,7 +1587,7 @@ static int nw_xfer_io_distribute(struct nw_xfer_request *xfer)
 				M0_ASSERT(m0_pdclust_unit_classify(play,
 					  src.sa_unit) == M0_PUT_PARITY);
 
-				M0_LOG(M0_DEBUG, "shipra: process parity units, unit number %"PRIu64, src.sa_unit);
+				M0_LOG(M0_DEBUG, "shipra: process parity units, unit number %"PRIu64" grpid %"PRIu64, src.sa_unit, iomap->pi_grpid);
 
 				rc = xfer->nxr_ops->nxo_tioreq_map(xfer, &src,
 								   &tgt, &ti);
@@ -1624,7 +1624,7 @@ static int nw_xfer_io_distribute(struct nw_xfer_request *xfer)
 				if (m0_bitmap_get(&units_spanned, unit))
 					continue;
 
-				M0_LOG(M0_ALWAYS, "shipra: cobs created for unspanned units %"PRIu64, unit);
+				M0_LOG(M0_ALWAYS, "shipra: cobs created for unspanned units %"PRIu64" grp id %"PRIu64, unit, iomap->pi_grpid);
 
 				src.sa_unit = unit;
 				rc = xfer->nxr_ops->nxo_tioreq_map(xfer, &src,
