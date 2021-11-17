@@ -536,6 +536,8 @@ struct pargrp_iomap_ops {
 				 m0_bindex_t         *index,
 				 uint32_t             count);
 
+	int (*pi_checksum_dgmode)(struct pargrp_iomap *map, uint32_t map_col);
+
 	/**
 	 * Marks all but the failed pages with flag PA_DGMODE_READ in
 	 * data matrix and parity matrix.

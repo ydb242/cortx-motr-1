@@ -1807,6 +1807,64 @@ par_fail:
 	return M0_ERR(rc);
 }
 
+static int pargrp_iomap_checksum_dgmode(struct pargrp_iomap *map, uint32_t map_col)
+{
+	uint32_t                    row;
+	struct m0_pdclust_layout   *play;
+	struct m0_op_io            *ioo;
+	int                         rc;
+
+	M0_PRE_EX(map != NULL && pargrp_iomap_invariant(map));
+	M0_ENTRY("grpid = %3"PRIu64, map->pi_grpid);
+	ioo = map->pi_ioo;
+	play = pdlayout_get(ioo);
+
+	map->pi_state = PI_DEGRADED;
+	++map->pi_ioo->ioo_dgmap_nr;
+
+	/* Mark firsy page from data unit to be failed */
+
+	M0_ASSERT(map->pi_databufs[0][map_col] != NULL);
+	map->pi_databufs[0][map_col]->db_flags |= PA_READ_FAILED;
+
+	/*
+	 * Since m0_parity_math_recover() API will recover one or more
+	 * whole_ units, all pages from a failed unit can be marked as
+	 * PA_READ_FAILED. These pages need not be read again.
+	 */
+	rc = pargrp_iomap_pages_mark_as_failed(map, M0_PUT_DATA);
+	if (rc != 0)
+		return M0_ERR(rc);
+
+	/*
+	 * If parity buffers are not allocated, they should be allocated
+	 * since they are needed for recovering lost data.
+	 */
+	if (map->pi_paritybufs == NULL) {
+		M0_ALLOC_ARR(map->pi_paritybufs, rows_nr(play, ioo->ioo_obj));
+		if (map->pi_paritybufs == NULL)
+			return M0_ERR(-ENOMEM);
+
+		for (row = 0; row < rows_nr(play, ioo->ioo_obj); ++row) {
+			M0_ALLOC_ARR(map->pi_paritybufs[row], layout_k(play));
+			if (map->pi_paritybufs[row] == NULL) {
+				rc = -ENOMEM;
+				goto par_fail;
+			}
+		}
+	}
+	rc = pargrp_iomap_pages_mark_as_failed(map, M0_PUT_PARITY);
+	return M0_RC(rc);
+
+par_fail:
+	M0_ASSERT(rc != 0);
+	for (row = 0; row < rows_nr(play, ioo->ioo_obj); ++row)
+		m0_free0(&map->pi_paritybufs[row]);
+	m0_free0(&map->pi_paritybufs);
+
+	return M0_ERR(rc);
+}
+
 /**
  * Re-organises and allocates buffers for data and parity matrices.
  * This is heavily based on
@@ -2343,6 +2401,7 @@ static const struct pargrp_iomap_ops iomap_ops = {
 	.pi_data_replicate         = pargrp_iomap_databuf_replicate,
 	.pi_paritybufs_alloc       = pargrp_iomap_paritybufs_alloc,
 	.pi_dgmode_process         = pargrp_iomap_dgmode_process,
+	.pi_checksum_dgmode        = pargrp_iomap_checksum_dgmode,
 	.pi_dgmode_postprocess     = pargrp_iomap_dgmode_postprocess,
 	.pi_dgmode_recover         = pargrp_iomap_dgmode_recover,
 	.pi_replica_recover        = pargrp_iomap_replica_elect,

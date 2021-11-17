@@ -1490,6 +1490,71 @@ static int device_check(struct m0_op_io *ioo)
 	return M0_RC(fdev_nr);
 }
 
+static bool checksum_verification(struct m0_op_io *ioo) {
+
+	struct m0_pi_seed         seed;
+	struct m0_bufvec          user_data = {};
+	int                       usz;
+	int                       rc;
+	struct m0_generic_pi     *pi_ondisk;
+	struct m0_ivec_cursor     extcur;
+	int                       attr_idx = 0;
+	bool                      result = true;
+	struct pargrp_iomap       *map;
+	int                       i;
+	int                       j;
+	int                       k;
+	int                       l;
+
+	M0_ENTRY();
+	usz = m0_obj_layout_id_to_unit_size(m0__obj_lid(ioo->ioo_obj));
+
+	m0_ivec_cursor_init(&extcur, &ioo->ioo_ext);
+
+	seed.pis_obj_id.f_container = ioo->ioo_obj->ob_entity.en_id.u_hi;
+	seed.pis_obj_id.f_key       = ioo->ioo_obj->ob_entity.en_id.u_lo;
+
+	for (k = 0; k < ioo->ioo_iomap_nr; k++) {
+
+		map = ioo->ioo_iomaps[k];
+
+		rc = m0_bufvec_empty_alloc(&user_data, map->pi_max_row);
+		if (rc != 0) {
+			M0_LOG(M0_ERROR, "buffer allocation failed, rc %d", rc);
+			M0_ASSERT(0);
+		}
+
+		for (j = 0; j < map->pi_max_col; j++) {
+
+			l = 0;
+			for (i = 0; i < map->pi_max_row; i++) {
+				user_data.ov_vec.v_count[l] = map->pi_databufs[i][j]->db_buf.b_nob;
+				user_data.ov_buf[l] = map->pi_databufs[i][j]->db_buf.b_addr;
+				l++;
+			}
+
+			if (ioo->ioo_attr.ov_vec.v_nr && ioo->ioo_attr.ov_vec.v_count[attr_idx] != 0) {
+
+				seed.pis_data_unit_offset   = m0_ivec_cursor_index(&extcur);
+
+				pi_ondisk = (struct m0_generic_pi *)ioo->ioo_attr.ov_buf[attr_idx];
+
+				if (!m0_calc_verify_cksum_one_unit(pi_ondisk, &seed, &user_data)) {
+					result = false;;
+					map->pi_ops->pi_checksum_dgmode(map, j);
+				}
+			}
+
+			attr_idx++;
+			m0_ivec_cursor_move(&extcur, usz);
+		}
+
+		m0_bufvec_free2(&user_data);
+	}
+
+	return result;
+}
+
 /**
  * Degraded mode read for a Client IO operation.
  * This is heavily based on m0t1fs/linux_kernel/file.c::ioreq_dgmode_read
@@ -1537,8 +1602,21 @@ static int ioreq_dgmode_read(struct m0_op_io *ioo, bool rmw)
 	 * resulting into ENOENT error.
 	 */
 	xfer = &ioo->ioo_nwxfer;
-	if (xfer->nxr_rc == 0 || xfer->nxr_rc == -ENOENT)
+
+	if (xfer->nxr_rc == -ENOENT)
 		return M0_RC(xfer->nxr_rc);
+	else if (xfer->nxr_rc == 0) {
+		if (ioo->ioo_attr.ov_vec.v_nr &&
+		    ioreq_sm_state(ioo) != IRS_DEGRADED_READING) {
+			if (checksum_verification(ioo) == true)
+				return M0_RC(0);
+			else
+				goto degraded;
+		}
+		else {
+			return M0_RC(0);
+		}
+	}
 
 	/*
 	 * Number of failed devices is not a criteria good enough
@@ -1599,6 +1677,7 @@ static int ioreq_dgmode_read(struct m0_op_io *ioo, bool rmw)
 	 * Starts processing the pages again if any of the parity groups
 	 * spanned by input IO-request is in degraded mode.
 	 */
+degraded:
 	if (ioo->ioo_dgmap_nr > 0) {
 		M0_LOG(M0_WARN, "Process failed parity groups in dgmode/read "
 				"ioo=%p dgmap_nr=%u",
