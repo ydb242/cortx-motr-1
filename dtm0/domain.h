@@ -59,6 +59,8 @@ struct m0_dtm0_domain_create_cfg {
 	struct m0_dtm0_log_create_cfg dcc_log;
 };
 
+struct m0_dtm0_service;
+
 struct m0_dtm0_domain {
 	struct m0_dtm0_log        dod_log;
 	struct m0_dtm0_pruner     dod_pruner;

@@ -10,6 +10,7 @@ m0tr_objects += \
                   dtm0/linux_kernel/stubs.o \
                   dtm0/log.o \
                   dtm0/net.o \
+                  dtm0/net_xc.o \
                   dtm0/pmach.o \
                   dtm0/pruner.o \
                   dtm0/remach.o \

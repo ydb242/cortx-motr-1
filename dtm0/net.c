@@ -29,15 +29,232 @@
 #include "lib/trace.h"
 
 #include "dtm0/net.h"
+#include "fop/fom.h"         /* m0_fom */
+#include "fop/fom_generic.h" /* M0_FOPH_TYPE_SPECIFIC */
+#include "fop/fop.h"         /* M0_FOP_TYPE_INIT */
+#include "rpc/rpc_opcodes.h" /* M0_DTM0_NET_OPCODE */
+#include "dtm0/service.h"    /* m0_dtm0_service_find */
+#include "dtm0/drlink.h"     /* m0_dtm0_req_post */
+#include "dtm0/fop.h"        /* dtm0_req_fop */
+
+extern struct m0_reqh_service_type dtm0_service_type;
+struct m0_fop_type dtm0_net_fop_fopt;
+
+enum {
+	M0_FOPH_NET_ENTRY = M0_FOPH_TYPE_SPECIFIC,
+	M0_FOPH_NET_EXIT,
+};
+
+struct m0_sm_state_descr dtm0_net_phases[] = {
+	[M0_FOPH_NET_ENTRY] = {
+		.sd_name      = "net-entry",
+		.sd_allowed   = M0_BITS(M0_FOPH_NET_EXIT,
+					M0_FOPH_FAILURE)
+	},
+	[M0_FOPH_NET_EXIT] = {
+		.sd_name      = "net-exit",
+		.sd_allowed   = M0_BITS(M0_FOPH_SUCCESS),
+	},
+};
+
+struct m0_sm_trans_descr dtm0_net_phases_trans[] = {
+	[ARRAY_SIZE(m0_generic_phases_trans)] =
+	{"net-entry-fail",     M0_FOPH_NET_ENTRY, M0_FOPH_FAILURE },
+	{"net-entry-success",  M0_FOPH_NET_ENTRY, M0_FOPH_NET_EXIT},
+	{"net-exit",           M0_FOPH_NET_EXIT,  M0_FOPH_SUCCESS },
+};
+
+static struct m0_sm_conf dtm0_net_sm_conf = {
+	.scf_name      = "dtm0-net-fom",
+	.scf_nr_states = ARRAY_SIZE(dtm0_net_phases),
+	.scf_state     = dtm0_net_phases,
+	.scf_trans_nr  = ARRAY_SIZE(dtm0_net_phases_trans),
+	.scf_trans     = dtm0_net_phases_trans,
+};
+
+static int    dtm0_net_fom_create(struct m0_fop  *fop, struct m0_fom **out,
+				  struct m0_reqh *reqh);
+static void   dtm0_net_fom_fini(struct m0_fom *fom);
+static size_t dtm0_net_fom_locality(const struct m0_fom *fom);
+/* XXX: static */ int    dtm0_net_fom_tick(struct m0_fom *fom);
+
+static const struct m0_fom_ops dtm0_pmsg_fom_ops = {
+	.fo_fini          = dtm0_net_fom_fini,
+	.fo_tick          = dtm0_net_fom_tick,
+	.fo_home_locality = dtm0_net_fom_locality
+};
+
+static const struct m0_fom_type_ops dtm0_net_fom_type_ops = {
+        .fto_create = dtm0_net_fom_create,
+};
+
+/* XXX: resource counter */
+static int global_users = 0;
+
+static void global_init(void)
+{
+	if (global_users++ > 0)
+		return;
+
+	m0_sm_conf_extend(m0_generic_conf.scf_state, dtm0_net_phases,
+			  m0_generic_conf.scf_nr_states);
+	m0_sm_conf_trans_extend(&m0_generic_conf, &dtm0_net_sm_conf);
+	m0_sm_conf_init(&dtm0_net_sm_conf);
+
+	M0_FOP_TYPE_INIT(&dtm0_net_fop_fopt,
+			 .name      = "DTM0 net",
+			 .opcode    = M0_DTM0_NET_OPCODE,
+			 .xt        = m0_dtm0_msg_xc,
+			 .rpc_flags = M0_RPC_ITEM_TYPE_REQUEST,
+			 .fom_ops   = &dtm0_net_fom_type_ops,
+			 .sm        = &dtm0_net_sm_conf,
+			 .svc_type  = &dtm0_service_type);
+}
+
+static void global_fini(void)
+{
+	if (--global_users == 0)
+		m0_fop_type_fini(&dtm0_net_fop_fopt);
+}
 
 M0_INTERNAL int m0_dtm0_net_init(struct m0_dtm0_net     *dnet,
 				 struct m0_dtm0_net_cfg *dnet_cfg)
 {
+	dnet->dnet_cfg = *dnet_cfg;
+	global_init();
 	return 0;
 }
 
 M0_INTERNAL void m0_dtm0_net_fini(struct m0_dtm0_net  *dnet)
 {
+	global_fini();
+}
+
+/* XXX */
+static void dtm0_msg2req_fop(const struct m0_dtm0_msg *msg,
+			     struct dtm0_req_fop      *req)
+{
+	*req = (struct dtm0_req_fop) {
+		.dtr_msg = DTM_NET,
+		.dtr_net_msg = *m0_dtm0_msg_dup(msg),
+	};
+}
+
+static void dtm0_req_fop2msg(const struct dtm0_req_fop *req,
+			     struct m0_dtm0_msg        *msg)
+{
+	*msg = *m0_dtm0_msg_dup(&req->dtr_net_msg);
+}
+
+M0_INTERNAL void m0_dtm0_net_send(struct m0_dtm0_net       *dnet,
+				  struct m0_be_op          *op,
+				  const struct m0_fid      *target,
+				  const struct m0_dtm0_msg *msg,
+				  const uint64_t           *parent_sm_id)
+{
+	struct m0_dtm0_service *svc;
+	struct m0_reqh         *reqh;
+	struct m0_fom           parent_fom = {
+		.fo_sm_phase.sm_id = parent_sm_id == NULL ? 0 : *parent_sm_id,
+	};
+	struct dtm0_req_fop     req;
+
+	dtm0_msg2req_fop(msg, &req);
+	reqh = dnet->dnet_cfg.dnc_reqh;
+	svc  = m0_dtm0_service_find(reqh);
+
+	m0_dtm0_req_post(svc, op, &req, target, &parent_fom, true);
+}
+
+/* XXX */
+#if defined(__KERNEL__)
+#define M0_BE_QUEUE__GET(...)
+#define M0_BE_QUEUE__PUT(...)
+#else
+#define M0_BE_QUEUE__GET M0_BE_QUEUE_GET
+#define M0_BE_QUEUE__PUT M0_BE_QUEUE_PUT
+#endif
+
+M0_INTERNAL void m0_dtm0_net_recv__post(struct m0_dtm0_net       *dnet,
+					struct m0_be_op          *op,
+					const struct m0_dtm0_msg *msg)
+{
+	struct m0_be_queue *q = &dnet->dnet_input[msg->dm_type];
+	m0_be_queue_lock(q);
+	M0_BE_QUEUE__PUT(q, op, (struct m0_dtm0_msg *) msg);
+	m0_be_queue_unlock(q);
+}
+
+M0_INTERNAL void m0_dtm0_net_recv(struct m0_dtm0_net       *dnet,
+				  struct m0_be_op          *op,
+				  bool                     *success,
+				  struct m0_dtm0_msg       *msg,
+				  enum m0_dtm0_msg_type     type)
+{
+	struct m0_be_queue *q = &dnet->dnet_input[type];
+	m0_be_queue_lock(q);
+	M0_BE_QUEUE__GET(q, op, msg, success);
+	m0_be_queue_unlock(q);
+}
+
+/* XXX */
+#undef M0_BE_QUEUE__GET
+#undef M0_BE_QUEUE__PUT
+
+M0_INTERNAL struct m0_dtm0_msg *m0_dtm0_msg_dup(const struct m0_dtm0_msg *msg)
+{
+	M0_ASSERT(0);
+	return NULL;
+}
+
+
+/* XXX: static */ int    dtm0_net_fom_tick(struct m0_fom *fom)
+{
+	int                     phase = m0_fom_phase(fom);
+	int                     result = M0_FSO_AGAIN;
+	struct dtm0_req_fop    *req = m0_fop_data(fom->fo_fop);
+	struct m0_dtm0_service *svc;
+	struct m0_dtm0_net     *dnet;
+	struct m0_dtm0_msg      msg;
+
+	M0_ENTRY("fom %p phase %d", fom, phase);
+
+	switch (phase) {
+	case M0_FOPH_INIT ... M0_FOPH_NR - 1:
+		result = m0_fom_tick_generic(fom);
+		break;
+	case M0_FOPH_NET_ENTRY:
+		svc = m0_dtm0_fom2service(fom);
+		M0_ASSERT(svc != NULL);
+		dnet = svc->dos_net;
+		dtm0_req_fop2msg(req, &msg);
+		M0_BE_OP_SYNC(op, m0_dtm0_net_recv__post(dnet, &op, &msg));
+		m0_fom_phase_set(fom, M0_FOPH_NET_EXIT);
+		break;
+	case M0_FOPH_NET_EXIT:
+		m0_fom_phase_set(fom, M0_FOPH_SUCCESS);
+		break;
+	default:
+		M0_IMPOSSIBLE("Invalid phase");
+	}
+
+	return M0_RC(result);
+}
+
+static int    dtm0_net_fom_create(struct m0_fop  *fop, struct m0_fom **out,
+				  struct m0_reqh *reqh)
+{
+	M0_ASSERT(0);
+}
+
+static void   dtm0_net_fom_fini(struct m0_fom *fom)
+{
+	M0_ASSERT(0);
+}
+
+static size_t dtm0_net_fom_locality(const struct m0_fom *fom)
+{
+	M0_ASSERT(0);
 }
 
 #undef M0_TRACE_SUBSYSTEM

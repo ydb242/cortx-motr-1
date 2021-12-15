@@ -30,6 +30,8 @@
 #include "xcode/xcode_attr.h" /* M0_XCA attrs */
 #include "dtm0/tx_desc.h"     /* m0_dtm0_tx_desc */
 #include "dtm0/tx_desc_xc.h"  /* m0_dtm0_tx_desc_xc */
+#include "dtm0/net.h"         /* m0_dtm0_msg */
+#include "dtm0/net_xc.h"      /* m0_dtm0_msg_xc */
 
 struct m0_be_tx;
 struct m0_buf;
@@ -47,7 +49,8 @@ enum m0_dtm0s_msg {
 	DTM_EXECUTE,
 	DTM_EXECUTED,
 	DTM_PERSISTENT,
-	DTM_REDO
+	DTM_REDO,
+	DTM_NET,
 } M0_XCA_ENUM;
 
 /** A DTM0 message sent as an RPC request to remote DTM0 services. */
@@ -55,6 +58,7 @@ struct dtm0_req_fop {
 	uint32_t               dtr_msg M0_XCA_FENUM(m0_dtm0s_msg);
 	struct m0_dtm0_tx_desc dtr_txr;
 	struct m0_buf          dtr_payload;
+	struct m0_dtm0_msg     dtr_net_msg;
 } M0_XCA_RECORD M0_XCA_DOMAIN(rpc);
 
 struct dtm0_rep_fop {
