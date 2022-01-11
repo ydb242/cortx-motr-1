@@ -56,6 +56,10 @@ M0_INTERNAL bool m0_dtm0_tx_desc__invariant(const struct m0_dtm0_tx_desc *td)
 	 * the descriptor should have a valid ID.
 	 */
 
+	return true;
+
+	/* XXX: Enable when transport is not based on drlink. */
+#if 0
 	return _0C(td->dtd_ps.dtp_pa != NULL) &&
 		_0C(m0_forall(i, td->dtd_ps.dtp_nr,
 			      td->dtd_ps.dtp_pa[i].p_state >= 0 &&
@@ -63,6 +67,7 @@ M0_INTERNAL bool m0_dtm0_tx_desc__invariant(const struct m0_dtm0_tx_desc *td)
 		_0C(ergo(m0_forall(i, td->dtd_ps.dtp_nr,
 			      td->dtd_ps.dtp_pa[i].p_state > M0_DTPS_INIT),
 			 m0_dtm0_tid__invariant(&td->dtd_id)));
+#endif
 }
 
 M0_INTERNAL bool m0_dtm0_tid__invariant(const struct m0_dtm0_tid *tid)

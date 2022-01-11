@@ -154,6 +154,8 @@ M0_INTERNAL void m0_dtm0_net_recv__post(struct m0_dtm0_net       *dnet,
 					struct m0_be_op          *op,
 					const struct m0_dtm0_msg *msg);
 M0_INTERNAL struct m0_dtm0_msg *m0_dtm0_msg_dup(const struct m0_dtm0_msg *msg);
+M0_INTERNAL int m0_dtm0_msg_copy(struct m0_dtm0_msg *dst,
+				 const struct m0_dtm0_msg *src);
 
 /** @} end of dtm0 group */
 #endif /* __MOTR___DTM0_NET_H__ */

@@ -114,6 +114,15 @@ static struct dtm0_req_fop *dtm0_req_fop_dup(const struct dtm0_req_fop *src)
 
 	dst->dtr_msg = src->dtr_msg;
 
+	rc = m0_dtm0_msg_copy(&dst->dtr_net_msg, &src->dtr_net_msg);
+	if (rc != 0) {
+		M0_ASSERT(rc == -ENOMEM);
+		m0_dtm0_tx_desc_fini(&dst->dtr_txr);
+		m0_buf_free(&dst->dtr_payload);
+		m0_free(dst);
+		return NULL;
+	}
+
 	return dst;
 }
 

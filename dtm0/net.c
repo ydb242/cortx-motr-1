@@ -36,6 +36,7 @@
 #include "dtm0/service.h"    /* m0_dtm0_service_find */
 #include "dtm0/drlink.h"     /* m0_dtm0_req_post */
 #include "dtm0/fop.h"        /* dtm0_req_fop */
+#include "lib/memory.h"      /* M0_ALLOC_PTR */
 
 extern struct m0_reqh_service_type dtm0_service_type;
 struct m0_fop_type dtm0_net_fop_fopt;
@@ -120,14 +121,56 @@ static void global_fini(void)
 M0_INTERNAL int m0_dtm0_net_init(struct m0_dtm0_net     *dnet,
 				 struct m0_dtm0_net_cfg *dnet_cfg)
 {
+	enum m0_dtm0_msg_type  type;
+	int                    rc;
+	struct m0_be_queue_cfg q_cfg = {
+		.bqc_q_size_max = 10,
+		.bqc_producers_nr_max = 1,
+		.bqc_consumers_nr_max = 1,
+		.bqc_item_length = sizeof(struct m0_dtm0_msg),
+	};
+	struct m0_dtm0_service *svc;
+
+	M0_ENTRY();
+	M0_PRE(M0_IS0(dnet));
+
 	dnet->dnet_cfg = *dnet_cfg;
 	global_init();
-	return 0;
+
+	for (type = 0; type < M0_DMT_NR; ++type) {
+		rc = m0_be_queue_init(&dnet->dnet_input[type], &q_cfg);
+		if (rc != 0)
+			return M0_ERR(rc);
+	}
+
+	/*
+	 * TODO: We temporary allow DTM0 net to be initialised
+	 * even if DTM0 service is not up and running.
+	 * It is needed to allow DTM0 net module to have control
+	 * over the service in the next iterations of refactoring.
+	 */
+	if (dnet->dnet_cfg.dnc_reqh != NULL) {
+		svc = m0_dtm0_service_find(dnet->dnet_cfg.dnc_reqh);
+		if (svc != NULL)
+			svc->dos_net = dnet;
+		else
+			M0_LOG(M0_WARN, "Transport is not bound with service.");
+	} else
+		M0_LOG(M0_WARN, "Transport is not bound with reqh.");
+
+	return M0_RC(0);
 }
 
 M0_INTERNAL void m0_dtm0_net_fini(struct m0_dtm0_net  *dnet)
 {
+	enum m0_dtm0_msg_type type;
+
+	M0_ENTRY();
+	M0_PRE(!M0_IS0(dnet));
 	global_fini();
+	for (type = 0; type < M0_DMT_NR; ++type)
+		m0_be_queue_fini(&dnet->dnet_input[type]);
+	M0_LEAVE();
 }
 
 /* XXX */
@@ -166,22 +209,13 @@ M0_INTERNAL void m0_dtm0_net_send(struct m0_dtm0_net       *dnet,
 	m0_dtm0_req_post(svc, op, &req, target, &parent_fom, true);
 }
 
-/* XXX */
-#if defined(__KERNEL__)
-#define M0_BE_QUEUE__GET(...)
-#define M0_BE_QUEUE__PUT(...)
-#else
-#define M0_BE_QUEUE__GET M0_BE_QUEUE_GET
-#define M0_BE_QUEUE__PUT M0_BE_QUEUE_PUT
-#endif
-
 M0_INTERNAL void m0_dtm0_net_recv__post(struct m0_dtm0_net       *dnet,
 					struct m0_be_op          *op,
 					const struct m0_dtm0_msg *msg)
 {
 	struct m0_be_queue *q = &dnet->dnet_input[msg->dm_type];
 	m0_be_queue_lock(q);
-	M0_BE_QUEUE__PUT(q, op, (struct m0_dtm0_msg *) msg);
+	M0_BE_QUEUE_PUT(q, op, msg);
 	m0_be_queue_unlock(q);
 }
 
@@ -193,18 +227,39 @@ M0_INTERNAL void m0_dtm0_net_recv(struct m0_dtm0_net       *dnet,
 {
 	struct m0_be_queue *q = &dnet->dnet_input[type];
 	m0_be_queue_lock(q);
-	M0_BE_QUEUE__GET(q, op, msg, success);
+	M0_BE_QUEUE_GET(q, op, msg, success);
 	m0_be_queue_unlock(q);
 }
 
-/* XXX */
-#undef M0_BE_QUEUE__GET
-#undef M0_BE_QUEUE__PUT
+M0_INTERNAL int m0_dtm0_msg_copy(struct m0_dtm0_msg *dst,
+				 const struct m0_dtm0_msg *src)
+{
+	switch (src->dm_type) {
+	case M0_DMT_EOL:
+		*dst = *src;
+		break;
+	default:
+		M0_IMPOSSIBLE("Not implemented yet");
+	}
+
+	return 0;
+}
 
 M0_INTERNAL struct m0_dtm0_msg *m0_dtm0_msg_dup(const struct m0_dtm0_msg *msg)
 {
-	M0_ASSERT(0);
-	return NULL;
+	int                 rc;
+	struct m0_dtm0_msg *dup;
+
+	M0_ALLOC_PTR(dup);
+	if (dup != NULL) {
+		rc = m0_dtm0_msg_copy(dup, msg);
+		if (rc != 0) {
+			M0_ASSERT(rc == 0);
+			m0_free(dup);
+			dup = NULL;
+		}
+	}
+	return dup;
 }
 
 
