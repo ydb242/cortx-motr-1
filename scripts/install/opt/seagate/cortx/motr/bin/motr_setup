@@ -41,6 +41,7 @@ class Cmd:
 
         self._services = args.services
         self._idx = args.idx
+        self._count = args.count
         # URL for Hare-Motr keys required for intercomponent communication
         Conf.load(self._index, self._url)
         self._args = args.args
@@ -66,9 +67,6 @@ class Cmd:
             self._url_motr_hare = f"json://{self._motr_hare_conf}"
             self.log_path_motr = f"{self.log_path}/motr/{self.machine_id}"
 
-            # Get setup size: VM=small, HW=large
-            self.setup_size = get_value(self, 'cortx>common>setup_size', str)
-
             # Check if local and log path exists, return if not exists
             validate_files([self.local_path, self.log_path])
 
@@ -81,8 +79,7 @@ class Cmd:
             self.cluster = get_value(self, 'cluster', dict)
             self.nodes = get_value(self, 'node', dict)
             self.node = get_server_node(self, True)
-            self.storage_nodes = get_data_nodes(self)
-            if self.machine_id in self.storage_nodes:
+            if self.node['type'] == 'storage_node':
                 self.storage = get_storage(self)
             Conf.load(self._index_motr_hare, self._url_motr_hare)
     @property
@@ -128,6 +125,7 @@ class Cmd:
                          action="store_true")
         parser1.add_argument('--services', type=str, help='Service name')
         parser1.add_argument('--idx', type=str, help='Service index')
+        parser1.add_argument('--count', type=int, help='Number of Io Service per container')
         parser1.set_defaults(command=cls)
 
 class PrepareCmd(Cmd):
@@ -311,7 +309,7 @@ class StartCmd(Cmd):
 
     def process(self):
         name = "start"
-        self.logger.info(f"Processing cmd={self.name} config={self.url} services={self._services} idx={self._idx}\n")
+        self.logger.info(f"Processing cmd={self.name} config={self.url} services={self._services} idx={self._idx} count={self._count}\n")
         nargs = len(self._args) #0
 
         if re.match('^[0-9]*$', self._services):
@@ -326,8 +324,13 @@ class StartCmd(Cmd):
             if idx < 1:
                 self.logger.error(f"Invalid index({idx}). Index starts from 1\n")
                 return
+
+            if not self._count:
+                self._count = 1
+            count = int(self._count)
+
             configure_machine_id(self, name)
-            start_service(self, svc, idx)
+            start_service(self, svc, idx, count)
         else:
             self.logger.error(f"Invalid number of arguments.\n")
             self.logger.error("Usage: <prog> [-h] <cmd> --config <url> --services <service_name>  --idx <index>\n")
