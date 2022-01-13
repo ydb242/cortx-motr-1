@@ -1421,7 +1421,6 @@ def start_ios(self, fid_list, count):
 # For other services like 'motr-free-space-mon' we do nothing.
 def start_service(self, service, idx, count):
     self.logger.info(f"service={service}\nidx={idx}\n")
-
     if service in ["fsm", "client", "motr_client"]:
         cmd = f"{MOTR_FSM_SCRIPT_PATH}"
         execute_command_verbose(self, cmd, set_timeout=False)
