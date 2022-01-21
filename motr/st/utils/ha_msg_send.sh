@@ -22,7 +22,24 @@ proc_state_change()
     local s_endpoint="$lnet_nid:$1"
     local fid=$2
     local state=$3
+    local forced_c_endpoint=$4
 
+    # XXX: A work around that allows the user
+    # to specify a pair of full endpoints (inet:tcp:A@1 and inet:tcp:B@2)
+    # rather than infering portions of it from the system.
+    # It is needed to allow this code work with libfab.
+    if [[ x"$4" != "x" ]]; then
+        if [[ "$1" =~ "inet:tcp:" ]]; then
+            c_endpoint=$4
+            s_endpoint=$1
+        else
+            echo "Cannot bypass the endpoint inference"
+            echo "  because the server address is not a generic endpoint."
+            exit 1
+        fi
+    fi
+
+    echo "addr=$1, s_endpoint=$s_endpoint, c_endpoint=$c_endpoint" >> /tmp/2
     send_ha_events "$fid" "$state" "$s_endpoint" "$c_endpoint"
 }
 
@@ -38,10 +55,10 @@ function usage()
     echo "EXAMPLE: $(basename "$0") \"12345:2:3\" \"^r|1:12\" \"online\""
 }
 
-if [ $# -ne 3 ]
-then
-    usage
-    exit 1
-fi
+#if [ $# -ne 3 ]
+#then
+    #usage
+    #exit 1
+#fi
 
-proc_state_change $1 $2 $3 > /dev/null
+proc_state_change $1 $2 $3 $4 > /dev/null

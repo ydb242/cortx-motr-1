@@ -1308,6 +1308,10 @@ static int recovery_fom_init(struct recovery_fom             *rf,
 		}
 		M0_ASSERT(!rf->rf_eolq.bq_the_end);
 		m->rm_local_rfom = rf;
+
+		/* XXX */
+		rf->rf_last_known_eol = true;
+		rf->rf_last_known_ha_state = M0_NC_DTM_RECOVERING;
 	}
 
 	rf->rf_m = m;
@@ -1320,6 +1324,9 @@ static int recovery_fom_init(struct recovery_fom             *rf,
 
 	m0_clink_init(&rf->rf_ha_clink, recovery_fom_ha_clink_cb);
 	m0_clink_add_lock(&proc_conf->pc_obj.co_ha_chan, &rf->rf_ha_clink);
+
+	M0_LOG(M0_DEBUG, "Subscribed to " FID_F " with initial state: %s",
+	       FID_P(target), m0_ha_state2str(proc_conf->pc_obj.co_ha_state));
 
 	m0_fom_init(&rf->rf_base, &recovery_fom_type,
 		    &recovery_fom_ops, NULL, NULL,
@@ -1688,7 +1695,7 @@ static bool was_log_replayed(struct recovery_fom *rf)
 	 */
 	bool is_na = rf->rf_is_volatile &&
 		M0_IN(rf->rf_last_known_ha_state,
-		      (M0_NC_UNKNOWN, M0_NC_FAILED));
+		      (M0_NC_UNKNOWN, M0_NC_FAILED, M0_NC_TRANSIENT));
 
 	bool outcome = ergo(!rf->rf_is_local && !is_na,
 			    M0_IN(rf->rf_last_known_ha_state,

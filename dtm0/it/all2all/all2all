@@ -70,7 +70,8 @@ function create_m0crate_cfg()
     local PROCESS_FID=$(echo $svcs_json_out | jq -r 'select( .name | contains("m0_client")) | .fid')
     local MOTR_HA_ADDR=$(echo $svcs_json_out | jq -r 'select( .name | contains("hax")) | .ep')
 
-    MOD_CLI_EP=$(echo "$MOTR_LOCAL_ADDR" | sed -E 's/.*@tcp[:](.*)/\1/')
+    MOD_CLI_EP=$(echo "$MOTR_LOCAL_ADDR")
+    #| sed -E 's/.*@tcp[:](.*)/\1/')
 
     local M0CRATE_CFG_TMP=m0crate_cfg.tmp
     cp $M0CRATE_CFG_IN $M0CRATE_CFG_TMP
@@ -86,7 +87,8 @@ function get_params_for_ha_msgs()
     local svcs_json_out=$(hctl status --json | jq -r '.nodes[] | .svcs[]')
     local svc_json_out=$(echo $svcs_json_out | jq -r 'select( .name | contains("ioservice"))')
     local cli_json_out=$(echo $svcs_json_out | jq -r 'select( .name | contains("m0_client"))')
-    M0D_ENDPOINTS=($(echo $svc_json_out | jq -r '.ep' | sed -E 's/.*@tcp[:](.*)/\1/'))
+    M0D_ENDPOINTS=($(echo $svc_json_out | jq -r '.ep'))
+    # | sed -E 's/.*@tcp[:](.*)/\1/'))
     M0D_FIDS_HEX=($(echo $svc_json_out | jq -r '.fid' | sed -E 's/0x720+([0-9][:]0x[A-Za-z0-9]+)/\1/'))
     M0D_FIDS_DEC=($(echo $svc_json_out | jq -r '.fid' | sed -E 's/0x720+([0-9][:])(0x[A-Za-z0-9]+)/printf "%s%d" \1 \2/e'))
     M0D_CLI_FID_DEC=$(echo $cli_json_out | jq -r '.fid' | sed -E 's/0x720+([0-9][:])(0x[A-Za-z0-9]+)/printf "%s%d" \1 \2/e')
@@ -115,8 +117,10 @@ function ha_msg_send()
         who="${M0D_FIDS_DEC[$who]}"
     fi
 
+    local source="inet:tcp:172.21.192.112@4002"
+
     _info "ha_msg_send: whom='${whom}', who='${who}', what='${what}'"
-    $MOTR_ST_UTILS_DIR/ha_msg_send.sh "$whom" "^r|$who" "$what"
+    $MOTR_ST_UTILS_DIR/ha_msg_send.sh "$whom" "^r|$who" "$what" "$source"
 }
 
 function ha_msg_send_cli()
@@ -523,6 +527,23 @@ function print_help()
     \n";
 }
 
+# Prints various variables used by the
+# script. The function is used only
+# for debugging of the script.
+function print_env()
+{
+    get_params_for_ha_msgs
+    get_m0d_pids
+    echo "M0D_ENDPOINTS: ${M0D_ENDPOINTS[@]}"
+    echo "M0D_FIDS_DEC: ${M0D_FIDS_DEC[@]}"
+    echo "M0D_FIDS_HEX: ${M0D_FIDS_HEX[@]}"
+    echo "M0D_PIDS: ${M0D_PIDS[@]}"
+
+    echo "M0D_CLI_FID_DEC: ${M0D_CLI_FID_DEC}"
+    echo "M0D_CLI_FID_HEX: ${M0D_CLI_FID_HEX}"
+    echo "MOD_CLI_EP: ${MOD_CLI_EP}"
+}
+
 # params:
 # (i) cycle_name Name of the test (cycle)
 # (ii) phase_name Name of a phase in the cycle.
@@ -543,6 +564,8 @@ function main()
                 print_help;;
             "--help")
                 print_help;;
+            "--print-env")
+                print_env;;
             *)
                 # Run ordinary all2al by default.
                 simple_boot_cycle;;
