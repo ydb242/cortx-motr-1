@@ -1457,6 +1457,8 @@ def start_service(self, service, idx, count):
         end_index = start_index + (count - 1) 
         for index , fids in enumerate(total_fids):
             if fids:
+                if index < start_index:
+                    continue
                 if index >= start_index and index <= end_index:
                     fid_list.append(fids)
                 else:
