@@ -494,7 +494,7 @@ enum {
 	 * These constants are used to create buffers acceptable to the
 	 * network code.
 	 */
-	
+
 #ifdef CONFIG_X86_64
 	M0_NETBUF_MASK              = 4096 - 1,
 	M0_NETBUF_SHIFT             = 12,
