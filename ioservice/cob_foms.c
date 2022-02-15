@@ -32,6 +32,8 @@
 #include "motr/setup.h"            /* m0_cs_ctx_get */
 #include "stob/domain.h"           /* m0_stob_domain_find_by_stob_id */
 
+#define M0_BYTECOUNT_USER_ID 8881212
+
 struct m0_poolmach;
 
 /* Forward Declarations. */
@@ -74,6 +76,8 @@ static void cob_stob_create_credit(struct m0_fom *fom);
 static int cob_stob_delete_credit(struct m0_fom *fom);
 static struct m0_cob_domain *cdom_get(const struct m0_fom *fom);
 static int cob_ops_stob_find(struct m0_fom_cob_op *co);
+static int cob_bytecount_decrement(struct m0_cob *cob, struct m0_cob_bckey *key,
+				   uint64_t bytecount, struct m0_be_tx *tx);
 
 enum {
 	CC_COB_VERSION_INIT	= 0,
@@ -530,6 +534,7 @@ static int cob_stob_delete_credit(struct m0_fom *fom)
 	fop_type = cob_op->fco_fop_type;
 	if (cob_is_md(cob_op)) {
 		cob_op_credit(fom, M0_COB_OP_DELETE, tx_cred);
+		cob_op_credit(fom, M0_COB_OP_BYTECOUNT_UPDATE, tx_cred);
 		if (cob_op->fco_recreate)
 			cob_op_credit(fom, M0_COB_OP_CREATE, tx_cred);
 		cob_op->fco_is_done = true;
@@ -1118,7 +1123,10 @@ static int cd_cob_delete(struct m0_fom            *fom,
 			 const struct m0_cob_attr *attr)
 {
 	int                   rc;
+	uint64_t              cob_size;
+	struct m0_fid         pver;
 	struct m0_cob        *cob;
+	struct m0_cob_bckey   key;
 
 	M0_PRE(fom != NULL);
 	M0_PRE(cd != NULL);
@@ -1131,6 +1139,10 @@ static int cd_cob_delete(struct m0_fom            *fom,
 		return M0_RC(rc);
 
 	M0_ASSERT(cob != NULL);
+
+	pver = cob->co_nsrec.cnr_pver;
+	cob_size = cob->co_nsrec.cnr_size;
+
 	M0_CNT_DEC(cob->co_nsrec.cnr_nlink);
 	M0_ASSERT(attr->ca_nlink == 0);
 	M0_ASSERT(cob->co_nsrec.cnr_nlink == 0);
@@ -1138,6 +1150,10 @@ static int cd_cob_delete(struct m0_fom            *fom,
 	rc = m0_cob_delete(cob, m0_fom_tx(fom));
 	if (rc == 0)
 		M0_LOG(M0_DEBUG, "Cob deleted successfully.");
+
+	key.cbk_pfid = pver; 
+	key.cbk_user_id = M0_BYTECOUNT_USER_ID;
+	rc = cob_bytecount_decrement(cob, &key, cob_size, m0_fom_tx(fom));
 
 	return M0_RC(rc);
 }
@@ -1223,6 +1239,31 @@ static int ce_stob_edit(struct m0_fom *fom, struct m0_fom_cob_op *cd,
 		rc = m0_storage_dev_stob_destroy(devs, stob, &fom->fo_tx);
 
 	return M0_RC(rc);
+}
+
+static int cob_bytecount_decrement(struct m0_cob *cob, struct m0_cob_bckey *key,
+				   uint64_t bytecount, struct m0_be_tx *tx)
+{
+	int                 rc;
+	uint64_t            old_bc;
+	struct m0_cob_bcrec rec = {};
+
+	M0_ENTRY("KEY: "FID_F"/%"PRIu64, FID_P(&key->cbk_pfid), key->cbk_user_id);
+
+	rc = m0_cob_bc_lookup(cob, key, &rec);
+	old_bc = rec.cbr_bytecount;
+	if (rc == 0) {
+		rec.cbr_bytecount -= bytecount;
+		rc = m0_cob_bc_update(cob, key, &rec, tx);
+		if (rc != 0)
+			return M0_ERR(rc);
+		M0_LOG(M0_DEBUG, "Bytecount reduced by %"PRIu64" [%"PRIu64" ->"
+				 " %"PRIu64"]", bytecount, old_bc,
+				 rec.cbr_bytecount);
+	} else
+		M0_ERR(rc);
+
+	return rc;
 }
 
 #undef M0_TRACE_SUBSYSTEM
