@@ -27,7 +27,9 @@ import glob
 import time
 import yaml
 import psutil
+from typing import List, Dict, Any 
 from cortx.utils.conf_store import Conf
+from cortx.utils.cortx import Const  
 
 MOTR_SERVER_SCRIPT_PATH = "/usr/libexec/cortx-motr/motr-monitor"
 MOTR_MKFS_SCRIPT_PATH = "/usr/libexec/cortx-motr/motr-mkfs"
@@ -416,26 +418,46 @@ def update_to_file(self, index, url, machine_id, md_disks):
             Conf.set(index, f"server>{machine_id}>cvg[{i}]>m0d[{j}]>md_seg1",f"{md_disk}")
             Conf.save(index)
 
+# populate self.storage_nodes with machine_id for all storage_nodes
+def get_data_nodes(self):
+    machines: Dict[str,Any] = self.nodes
+    storage_nodes: List[str] = []
+    services = Conf.search(self._index, 'node', 'services', Const.SERVICE_MOTR_IO.value)
+    for machine_id in machines.keys():
+       result = [svc for svc in services if machine_id in svc]
+       # skipped control , HA and server pod
+       if result:
+           storage_nodes.append(machine_id)
+    return storage_nodes
+
 def update_motr_hare_keys(self, nodes):
     # key = machine_id value = node_info
-    for machine_id, node_info in nodes.items():
-        if node_info['type'] == 'storage_node':
-            md_disks_lists = get_md_disks_lists(self, node_info)
-            update_to_file(self, self._index_motr_hare, self._url_motr_hare, machine_id, md_disks_lists)
+    for machine_id in self.storage_nodes:
+        node_info = nodes.get(machine_id)
+        md_disks_lists = get_md_disks_lists(self, node_info)
+        update_to_file(self, self._index_motr_hare, self._url_motr_hare, machine_id, md_disks_lists)
 
 def motr_config_k8(self):
     if not verify_libfabric(self):
         raise MotrError(errno.EINVAL, "libfabric is not up.")
 
-    # Update motr-hare keys only for storage node
-    if self.node['type'] == 'storage_node':
-        update_motr_hare_keys(self, self.nodes)
+    if self.machine_id not in self.storage_nodes:
+        # Modify motr config file
+        update_copy_motr_config_file(self)
+        return
 
+    # If setup_size is large i.e.HW, read the (key,val)
+    # from /opt/seagate/cortx/motr/conf/motr.conf and
+    # update to /etc/sysconfig/motr
+    if self.setup_size == "large":
+        cmd = "{} {}".format(MOTR_CONFIG_SCRIPT, " -c")
+        execute_command(self, cmd, verbose = True)
+
+    update_motr_hare_keys(self, self.nodes)
     execute_command(self, MOTR_CONFIG_SCRIPT, verbose = True)
 
     # Update be_seg size only for storage node
-    if self.node['type'] == 'storage_node':
-        update_bseg_size(self)
+    update_bseg_size(self)
 
     # Modify motr config file
     update_copy_motr_config_file(self)
@@ -796,13 +818,11 @@ def update_bseg_size(self):
         md_len = len(md_disks)
         for i in range(md_len):
             lvm_min_size = calc_lvm_min_size(self, md_disks[i], lvm_min_size)
-        '''
         if lvm_min_size:
             align_val(lvm_min_size, 4096)
             self.logger.info(f"setting MOTR_M0D_IOS_BESEG_SIZE to {lvm_min_size}\n")
             cmd = f'sed -i "/MOTR_M0D_IOS_BESEG_SIZE/s/.*/MOTR_M0D_IOS_BESEG_SIZE={lvm_min_size}/" {MOTR_SYS_CFG}'
             execute_command(self, cmd)
-        '''
         return
 
     # For non k8
@@ -826,12 +846,10 @@ def update_bseg_size(self):
                 lv_list[i] = lv_list[i].strip()
                 lv_path = lv_list[i]
                 lvm_min_size = calc_lvm_min_size(self, lv_path, lvm_min_size)
-    '''
     if lvm_min_size:
         self.logger.info(f"setting MOTR_M0D_IOS_BESEG_SIZE to {lvm_min_size}\n")
         cmd = f'sed -i "/MOTR_M0D_IOS_BESEG_SIZE/s/.*/MOTR_M0D_IOS_BESEG_SIZE={lvm_min_size}/" {MOTR_SYS_CFG}'
         execute_command(self, cmd)
-    '''
 
 def config_lvm(self):
     dev_count = 0
@@ -858,12 +876,10 @@ def config_lvm(self):
             res = execute_command(self, cmd)
             lv_path = res[0].rstrip("\n")
             lvm_min_size = calc_lvm_min_size(self, lv_path, lvm_min_size)
-    '''
     if lvm_min_size:
         self.logger.info(f"setting MOTR_M0D_IOS_BESEG_SIZE to {lvm_min_size}\n")
         cmd = f'sed -i "/MOTR_M0D_IOS_BESEG_SIZE/s/.*/MOTR_M0D_IOS_BESEG_SIZE={lvm_min_size}/" {MOTR_SYS_CFG}'
         execute_command(self, cmd)
-    '''
 
 def get_lnet_xface() -> str:
     """Get lnet interface."""
@@ -1421,7 +1437,7 @@ def start_ios(self, fid_list, count):
 # For other services like 'motr-free-space-mon' we do nothing.
 def start_service(self, service, idx, count):
     self.logger.info(f"service={service}\nidx={idx}\n")
-    if service in ["fsm", "client", "motr_client"]:
+    if service == "fsm":
         cmd = f"{MOTR_FSM_SCRIPT_PATH}"
         execute_command_verbose(self, cmd, set_timeout=False)
         return
