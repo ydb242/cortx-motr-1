@@ -1198,7 +1198,7 @@ static int fdmi_sd_timer_fom_tick(struct m0_fom *fom)
 		m0_fom_timeout_init(&timer_fom->fstf_timeout);
 		m0_fom_timeout_wait_on(&timer_fom->fstf_timeout,
 				       fom,
-				       m0_time_from_now(30, 0));
+				       m0_time_from_now(300, 0));
 		m0_fom_phase_set(fom, FDMI_SRC_DOCK_TIMER_FOM_PHASE_WAIT);
 		m0_fdmi__src_dock_fom_wakeup(&src_dock->fsdc_sd_fom);
 		return M0_RC(M0_FSO_WAIT);
