@@ -1679,7 +1679,7 @@ int m0_client_init(struct m0_client **m0c_p,
 		M0_ASSERT(m0c->m0c_dtms != NULL);
 	}
 	M0_LOG(M0_ALWAYS,"[CLIENT] mc_is_addb_init %d",conf->mc_is_addb_init);
-	conf->mc_is_addb_init =  false;
+	conf->mc_is_addb_init =  true;
 	if (conf->mc_is_addb_init) {
 		char buf[64];
 		/* Default client addb record file size set to 128M */
