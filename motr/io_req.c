@@ -330,7 +330,10 @@ static void ioreq_iosm_handle_launch(struct m0_sm_group *grp,
 	M0_PRE_EX(m0_op_io_invariant(ioo));
 	op = &ioo->ioo_oo.oo_oc.oc_op;
 	play = pdlayout_get(ioo);
-
+	if (op->op_code == M0_OC_WRITE) {
+		ioreq_sm_executed_post(ioo);
+		goto fake_launch;
+	}
 	/* @todo Do error handling based on m0_sm::sm_rc. */
 	/*
 	 * Since m0_sm is part of io_request, for any parity group
@@ -413,7 +416,7 @@ static void ioreq_iosm_handle_launch(struct m0_sm_group *grp,
 out:
 	M0_LOG(M0_INFO, "nxr_bytes = %" PRIu64 ", copied_nr = %"PRIu64,
 	       ioo->ioo_nwxfer.nxr_bytes, ioo->ioo_copied_nr);
-
+fake_launch:
 	/* lock this as it isn't a locality group lock */
 	m0_sm_group_lock(&op->op_sm_group);
 	m0_sm_move(&op->op_sm, 0, M0_OS_LAUNCHED);
@@ -468,6 +471,8 @@ static void ioreq_iosm_handle_executed(struct m0_sm_group *grp,
 	op = &ioo->ioo_oo.oo_oc.oc_op;
 	instance = m0__op_instance(op);
 	M0_PRE(instance != NULL);
+	if (op->op_code == M0_OC_WRITE)
+		goto fake_executed;
 
 	play = pdlayout_get(ioo);
 
@@ -703,7 +708,7 @@ done:
 	 * Client introduced SYNC APIs to allow an application explictly to
 	 * flush data to disks.
 	 */
-
+fake_executed:
 	m0_sm_group_lock(&op->op_sm_group);
 	m0_sm_move(&op->op_sm, ioo->ioo_rc, M0_OS_EXECUTED);
 	m0_op_executed(op);

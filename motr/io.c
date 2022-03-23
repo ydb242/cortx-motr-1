@@ -252,6 +252,12 @@ static void obj_io_cb_launch(struct m0_op_common *oc)
 	ioo = bob_of(oo, struct m0_op_io, ioo_oo, &ioo_bobtype);
 	M0_PRE_EX(m0_op_io_invariant(ioo));
 
+	if (oc->oc_op.op_code == M0_OC_WRITE) {
+		ioo->ioo_ast.sa_cb = ioo->ioo_ops->iro_iosm_handle_launch;
+		m0_sm_ast_post(ioo->ioo_oo.oo_sm_grp, &ioo->ioo_ast);
+		return;
+	}
+
 	rc = ioo->ioo_ops->iro_iomaps_prepare(ioo);
 	if (rc != 0)
 		goto end;

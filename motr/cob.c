@@ -247,6 +247,7 @@ static void cob_req_release(struct cob_req *cr) {
 	struct m0_op        *op = cr->cr_op;
 	int                  i;
 
+	M0_ENTRY("YJC: op = %p", op);
 	m0_ast_rc_bob_fini(&cr->cr_ar);
 	cob_req_bob_fini(cr);
 
@@ -307,6 +308,7 @@ static struct cob_req *cob_req_alloc(struct m0_pool_version *pv)
 	struct cob_req *cr;
 	uint32_t        pool_width = pv->pv_attr.pa_P;
 
+	M0_LOG(M0_ALWAYS, "Callin g cob request");
 	cr = m0_alloc(sizeof *cr);
 	if (cr == NULL)
 		return NULL;
@@ -346,6 +348,7 @@ static void cob_req_free(struct cob_req *cr)
 
 	M0_ADDB2_ADD(M0_AVI_CLIENT_COB_REQ, cr->cr_id, COB_REQ_DONE);
 
+	M0_ENTRY("YJC: op = %p", cr->cr_op);
 	if (cr->cr_op != NULL) {
 		struct m0_op *op = cr->cr_op;
 		m0_mutex_lock(&op->op_priv_lock);
@@ -633,6 +636,7 @@ static void cob_ast_complete_cr(struct m0_sm_group *grp,
 
 	/* Process the reply according to the type of op. */
 	op = cr->cr_op;
+	M0_LOG(M0_ALWAYS, "YJC: op = %p", op);
 	cob_rep_process(cr);
 	cob_req_free(cr);
 	cob_complete_op(op);
@@ -646,6 +650,7 @@ static void cob_fail_cr(struct cob_req *cr, int rc)
 	M0_ASSERT(rc != 0);
 
 	op = cr->cr_op;
+	M0_LOG(M0_ALWAYS, "YJC: op = %p", op);
 	cob_req_free(cr);
 	cob_fail_op(op, rc);
 
@@ -1827,6 +1832,7 @@ M0_INTERNAL int m0__obj_namei_send(struct m0_op_obj *oo)
 		return M0_ERR(-ENOMEM);
 
 	op               = &oo->oo_oc.oc_op;
+	M0_LOG(M0_ALWAYS, "YJC: op = %p", op);
 	cr->cr_cinst     = cinst;
 	cr->cr_fid       = oo->oo_fid;
 	cr->cr_op        = op;
@@ -1847,6 +1853,7 @@ M0_INTERNAL int m0__obj_namei_send(struct m0_op_obj *oo)
 	M0_ALLOC_PTR(cob_attr);
 	if (cob_attr == NULL) {
 		cob_req_free(cr);
+		M0_LOG(M0_ALWAYS, "YJC: ERROR No memory op = %p", op);
 		return M0_ERR(-ENOMEM);
 	}
 	cr->cr_cob_attr = cob_attr;
@@ -1904,6 +1911,8 @@ M0_INTERNAL int m0__obj_namei_send(struct m0_op_obj *oo)
 			cob_complete_op(cr->cr_op);
 			m0_sm_group_lock(&cr->cr_op->op_sm_group);
 			rc = MOTR_MDCOB_LOOKUP_SKIP;
+			//m0_free(cob_attr);
+			cob_req_free(cr);
 		}
 	}
 

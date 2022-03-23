@@ -375,8 +375,6 @@ M0_INTERNAL void m0_entity_init(struct m0_entity *entity,
 {
 	struct m0_sm_group *grp;
 
-	M0_ENTRY();
-
 	M0_PRE(entity != NULL);
 	M0_PRE(parent != NULL);
 	M0_PRE(parent->re_instance != NULL);
@@ -385,6 +383,7 @@ M0_INTERNAL void m0_entity_init(struct m0_entity *entity,
 	M0_PRE(m0_sm_conf_is_initialized(&entity_conf));
 	M0_PRE(m0_entity_type_is_valid(type));
 
+	M0_ENTRY("Entity = %p", entity);
 	/* initalise the entity */
 	entity->en_type = type;
 	entity->en_id = *id;
@@ -439,7 +438,7 @@ void m0_entity_fini(struct m0_entity *entity)
 {
 	struct m0_reqh_service_txid *iter;
 
-	M0_ENTRY();
+	M0_ENTRY("Entity = %p", entity);
 
 	M0_PRE(entity != NULL);
 	M0_PRE(M0_IN(entity->en_sm.sm_state,
@@ -521,7 +520,7 @@ M0_INTERNAL int m0_op_stable(struct m0_op *op)
 {
 	struct m0_client *m0c;
 
-	M0_ENTRY();
+	M0_ENTRY("obj_id: "U128X_F, U128_P(&op->op_entity->en_id));
 
 	M0_ASSERT(m0_op_invariant(op));
 

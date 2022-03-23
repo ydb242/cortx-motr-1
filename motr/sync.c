@@ -795,6 +795,7 @@ void sync_record_update(struct m0_reqh_service_ctx *service,
 	M0_ENTRY();
 
 	M0_PRE(service != NULL);
+	return;
 
 	/* Updates pending transaction number in the entity. */
 	if ( ent!= NULL)
