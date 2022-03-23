@@ -473,6 +473,7 @@ function recovery_phase()
     local nr_redo=8
     local redo_pattern="m0_dtm0_recovery_machine_redo_post   > in-redo"
     local dtx_done_pattern="dtx_done                             >"
+    local m0kv_wait_file="/tmp/m0kv_wait"
 
     _info "Phase recovery:recovery"
     local svc_name="m0d@0x720000000000000${M0D_FIDS_HEX[VICTIM]}.service"
@@ -485,7 +486,7 @@ function recovery_phase()
 
     _info "PUT one key, hang on"
     m0kv_async -s index put "${DINDEX}" mykey2 myvalue2 \
-        wait w put "${DINDEX}" mykey3 myvalue3
+        wait "${m0kv_wait_file}" put "${DINDEX}" mykey3 myvalue3
 
     _info "Wait until mykey2 reached the persistent storage on at least one node."
     while ! expect_trace_lines_from_cli "$dtx_done_pattern" 1; do
@@ -502,7 +503,7 @@ function recovery_phase()
     sleep 10
 
     # Let the client create a non-fully replicated record.
-    echo "w" > /proc/$CLIENT_PID/fd/0
+    touch "$m0kv_wait_file"
 
     client_wait
 
