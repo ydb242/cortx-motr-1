@@ -90,7 +90,6 @@ BuildRequires:  perl-YAML-LibYAML
 BuildRequires:  kernel-devel = %{kernel_ver_requires}
 BuildRequires:  %{lustre_devel}
 BuildRequires:  libuuid-devel
-BuildRequires:  openssl
 BuildRequires:  openssl-devel
 BuildRequires:  binutils-devel
 %if %{rhel} <= 7
