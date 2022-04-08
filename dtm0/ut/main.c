@@ -105,6 +105,7 @@ static void cas_xcode_test(void)
 extern void m0_dtm0_ut_drlink_simple(void);
 extern void m0_dtm0_ut_domain_init_fini(void);
 extern void m0_dtm0_ut_log_simple(void);
+extern void m0_dtm0_ut_log_mpsc(void);
 
 struct m0_ut_suite dtm0_ut = {
         .ts_name = "dtm0-ut",
@@ -113,6 +114,7 @@ struct m0_ut_suite dtm0_ut = {
                 { "drlink-simple",         &m0_dtm0_ut_drlink_simple          },
                 { "domain_init-fini",      &m0_dtm0_ut_domain_init_fini       },
                 { "log-simple",            &m0_dtm0_ut_log_simple             },
+                { "log-mpsc",              &m0_dtm0_ut_log_mpsc               },
 		{ NULL, NULL },
 	}
 };
