@@ -1700,6 +1700,11 @@ static void cs_dtm0_fini(struct m0_reqh_context *rctx)
 	m0_dtm0_domain_fini(&rctx->rc_dtm0_domain);
 }
 
+static void cs_dtm0_recovered_wait(struct m0_reqh_context *rctx)
+{
+	m0_dtm0_domain_recovered_wait(&rctx->rc_dtm0_domain);
+}
+
 static void cs_reqh_shutdown(struct m0_reqh_context *rctx)
 {
 	struct m0_reqh *reqh = &rctx->rc_reqh;
@@ -2734,14 +2739,11 @@ static int cs_level_enter(struct m0_module *module)
 		return M0_RC(0);
 	case CS_LEVEL_STARTED_EVENT_FOR_M0D:
 		cs_ha_process_event(cctx, M0_CONF_HA_PROCESS_STARTED);
-		/*
-		For m0d, M0_NC_DTM_RECOVERING state is being sent here just for
-		test purposes. The real notification shall be sent inside
-		dtm0_rmsg_fom_tick().
-
-		cs_ha_process_event(cctx,
-				    M0_CONF_HA_PROCESS_DTM_RECOVERED);
-		*/
+		if (m0_reqh_has_dtm0_service(&rctx->rc_reqh)) {
+			cs_dtm0_recovered_wait(rctx);
+			cs_ha_process_event(cctx,
+					    M0_CONF_HA_PROCESS_DTM_RECOVERED);
+		}
 		return M0_RC(0);
 	case CS_LEVEL_START:
 		return M0_RC(0);

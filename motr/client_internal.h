@@ -994,6 +994,8 @@ M0_INTERNAL bool entity_id_is_valid(const struct m0_uint128 *id);
 M0_INTERNAL struct m0_client *
 m0__idx_instance(const struct m0_idx *idx);
 
+M0_INTERNAL void m0_client_ha_process_event(struct m0_client              *m0c,
+					    enum m0_conf_ha_process_event  event);
 /** @} end of client group */
 
 #endif /* __MOTR_CLIENT_INTERNAL_H__ */

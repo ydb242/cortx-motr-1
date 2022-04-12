@@ -1626,8 +1626,6 @@ int m0_client_init(struct m0_client **m0c_p,
 		   M0_NC_DTM_RECOVERING state is transient, sending
 		   M0_CONF_HA_PROCESS_DTM_RECOVERED just after
 		   M0_CONF_HA_PROCESS_STARTED.
-
-		   ha_process_event(m0c, M0_CONF_HA_PROCESS_DTM_RECOVERED);
 		*/
 	}
 
@@ -1650,6 +1648,10 @@ int m0_client_init(struct m0_client **m0c_p,
 	/* Init the hash-table for RM contexts */
 	rm_ctx_htable_init(&m0c->m0c_rm_ctxs, M0_RM_HBUCKET_NR);
 
+	if (m0_reqh_has_dtm0_service(&m0c->m0c_reqh)) {
+		m0_dtm0_domain_recovered_wait(&m0c->m0c_dtm0_domain);
+		ha_process_event(m0c, M0_CONF_HA_PROCESS_DTM_RECOVERED);
+	}
 	if (ENABLE_DTM0) {
 		struct m0_reqh_service *reqh_svc;
 

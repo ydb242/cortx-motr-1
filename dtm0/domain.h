@@ -81,8 +81,10 @@ m0_dtm0_domain_create(struct m0_dtm0_domain            *dod,
 
 M0_INTERNAL void m0_dtm0_domain_destroy(struct m0_dtm0_domain *dod);
 
+M0_INTERNAL void m0_dtm0_domain_recovered_wait(struct m0_dtm0_domain *dod);
 
-
+struct m0_reqh;
+M0_INTERNAL bool m0_reqh_has_dtm0_service(struct m0_reqh *reqh);
 
 /** @} end of dtm0 group */
 #endif /* __MOTR___DTM0_DOMAIN_H__ */
