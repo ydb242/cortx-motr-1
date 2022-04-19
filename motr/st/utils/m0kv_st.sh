@@ -40,6 +40,16 @@ small_size=20
 . $M0_SRC_DIR/m0t1fs/linux_kernel/st/m0t1fs_server_inc.sh
 . $M0_SRC_DIR/motr/st/utils/motr_local_conf.sh
 
+# To have 3 IOs
+IOSEP=(
+    12345:33:900   # IOS1 EP
+    12345:33:901   # IOS2 EP
+    12345:33:902   # IOS3 EP
+)
+
+# To have N+K+S = 1+2+0 for DIX
+MOTR_DIX_PG_N_EQ_P="YES"
+
 out_file="${SANDBOX_DIR}/m0kv_st.log"
 rc_file="${SANDBOX_DIR}/m0kv_st.cod.log"
 erc_file="${SANDBOX_DIR}/m0kv_st.ecod.log"
@@ -741,7 +751,7 @@ main()
 	if [ ${do_dixinit} == 1 ]; then
 		dixinit_exec || error "m0dixinit failed ($?)!"
 	fi
-	m0kv_st_start_tests
+	#m0kv_st_start_tests
 	m0kv_st_post
 }
 

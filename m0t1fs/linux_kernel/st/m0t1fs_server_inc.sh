@@ -310,6 +310,8 @@ EOF
 		DIR=$MOTR_M0T1FS_TEST_DIR/confd
 		CONFDB="$DIR/conf.xc"
 		build_conf $N $K $S $P $multiple_pools | tee $DIR/conf.xc
+                # [DTM0] Uncomment to test conf building, remove in final solution
+                #exit 0
 		common_opts="-D db -S stobs -A linuxstob:addb-stobs \
 			     -w $P -m $MAX_RPC_MSG_SIZE \
 			     -q $TM_MIN_RECV_QUEUE_LEN -N 100663296 -C 262144 -K 100663296 -k 262144"
