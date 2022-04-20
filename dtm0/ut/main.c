@@ -107,7 +107,12 @@ extern void m0_dtm0_ut_domain_init_fini(void);
 extern void m0_dtm0_ut_log_simple(void);
 extern void m0_dtm0_ut_log_mpsc(void);
 extern void m0_dtm0_ut_pruner_init_fini(void);
-void m0_dtm0_ut_pruner_start_stop(void);
+extern void m0_dtm0_ut_pruner_start_stop(void);
+extern void m0_dtm0_ut_pruner_one(void);
+extern void m0_dtm0_ut_pruner_two(void);
+extern void m0_dtm0_ut_pruner_many_left(void);
+extern void m0_dtm0_ut_pruner_mpsc(void);
+extern void m0_dtm0_ut_pruner_mpsc_many(void);
 
 struct m0_ut_suite dtm0_ut = {
         .ts_name = "dtm0-ut",
@@ -118,7 +123,11 @@ struct m0_ut_suite dtm0_ut = {
                 { "log-simple",            &m0_dtm0_ut_log_simple             },
                 { "log-mpsc",              &m0_dtm0_ut_log_mpsc               },
                 { "pruner_init-fini",      &m0_dtm0_ut_pruner_init_fini       },
-                { "pruner_start-stop",     &m0_dtm0_ut_pruner_start_stop      },
+                { "pruner_one",            &m0_dtm0_ut_pruner_one             },
+                { "pruner_two",            &m0_dtm0_ut_pruner_two             },
+                { "pruner_many_left",      &m0_dtm0_ut_pruner_many_left       },
+                { "pruner_mpsc",           &m0_dtm0_ut_pruner_mpsc            },
+                { "pruner_mpsc_many",      &m0_dtm0_ut_pruner_mpsc_many       },
 		{ NULL, NULL },
 	}
 };
