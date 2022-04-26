@@ -221,17 +221,6 @@ M0_INTERNAL void m0_dtm0_domain_destroy(struct m0_dtm0_domain *dod)
 M0_INTERNAL void m0_dtm0_domain_recovered_wait(struct m0_dtm0_domain *dod)
 {
 	M0_ENTRY();
-	/*
-	 * XXX: Emulate a small delay. It is not clear at the moment
-	 * if it is really needed, but helps avoid troubles during
-	 * bootstrapping of cluster.
-	 * TODO: we definitely need to get rid of it (or find a reasonable
-	 * explanation of why it should be here).
-	 */
-#if !defined(__KERNEL__)
-	void sleep(int);
-	sleep(1);
-#endif
 	M0_LEAVE();
 }
 
