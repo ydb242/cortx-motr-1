@@ -563,8 +563,8 @@ M0_INTERNAL int m0_be_dtm0_log_iter_next(struct m0_be_dtm0_log_iter *iter,
 /**
  * DTM0 Log iterator
  *
- * Provides a way to iterate over the DTM0 Log structure. Today has a very
- * inefficient implementation and used to glue log related code together with
+ * Provides a way to iterate over the DTM0 Log structure. Today it has a very
+ * inefficient implementation and is used to glue log related code together with
  * redo logic and expose interfaces which hopefully will not change.
  */
 struct m0_be_dtm0_log_iter {
@@ -588,7 +588,7 @@ M0_INTERNAL void m0_be_dtm0_log_iter_fini(struct m0_be_dtm0_log_iter *iter);
 /**
  * Returns next record of the iterator pointing to the log.
  *
- * @param out returned record which is copied and need to be freed with
+ * @param out returned record which is copied and needs to be freed with
  *            m0_dtm0_log_iter_rec_fini()
  *
  * @return +1 when the iterator was successfully moved to the next record.
