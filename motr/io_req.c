@@ -1504,7 +1504,8 @@ static int device_check(struct m0_op_io *ioo)
 		node_id = node_obj->pn_id.f_key;
 
 		ti->ti_state = state;
-		if (ti->ti_rc == -ECANCELED) {
+		if (M0_IN(ti->ti_rc, (-ECANCELED, -ENOTCONN)) ||
+		    M0_IN(node_state, (M0_PNDS_FAILED, M0_PNDS_OFFLINE))) {
 			/* Ignore service failures in a failed node */
 			if (M0_IN(node_state, (M0_PNDS_FAILED,
 					       M0_PNDS_OFFLINE))) {

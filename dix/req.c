@@ -2042,7 +2042,8 @@ static void dix_pg_unit_pd_assign(struct m0_dix_pg_unit *pgu,
 	pgu->dpu_tgt      = pd->pd_index;
 	pgu->dpu_sdev_idx = pd->pd_sdev_idx;
 	pgu->dpu_pd_state = pd->pd_state;
-	pgu->dpu_failed   = pool_failed_devs_tlink_is_in(pd);
+	pgu->dpu_failed   = pool_failed_devs_tlink_is_in(pd) ||
+			    pgu->dpu_pd_state == M0_PNDS_OFFLINE;;
 }
 
 /**
@@ -2206,8 +2207,7 @@ static bool dix_pg_unit_skip(struct m0_dix_req     *req,
 			     struct m0_dix_pg_unit *unit)
 {
 	if (dix_req_state(req) != DIXREQ_DEL_PHASE2)
-		return unit->dpu_failed || unit->dpu_is_spare ||
-			unit->dpu_pd_state == M0_PNDS_OFFLINE;
+		return unit->dpu_failed || unit->dpu_is_spare;
 	else
 		return !unit->dpu_del_phase2;
 }
