@@ -460,7 +460,7 @@ AC_ARG_WITH([trace-ubuf-size],
         [AS_HELP_STRING([--with-trace-ubuf-size=number],
                         [set user space trace buffer size in MiB, default is 16MiB])],
         [TRACE_UBUF_SIZE=$with_trace_ubuf_size],
-        [TRACE_UBUF_SIZE=16]
+        [TRACE_UBUF_SIZE=64]
 )
 AS_IF([test -z "$TRACE_UBUF_SIZE" || test "x$TRACE_UBUF_SIZE" = xyes ||
        test "x$TRACE_UBUF_SIZE" = xno],
