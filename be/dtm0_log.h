@@ -517,32 +517,16 @@ M0_INTERNAL void m0_be_dtm0_volatile_log_update(struct m0_be_dtm0_log  *log,
  * @param fini Specifies whether deleted record needs to be finalised.
  * @return None.
  */
-M0_INTERNAL void m0_be_dtm0_volatile_log_del(struct m0_be_dtm0_log   *log,
-					     struct m0_dtm0_log_rec **rec,
-					     bool                     fini);
-
-/**
- * Deliver a persistent message to the log.
- *
- * @pre log is a volatile log
- * @pre fop->f_type == &dtm0_req_fop_fopt;
- * @post None
- *
- * @param log Pointer to the dtm0 log which we wish to destroy
- * @param fop This is a fop for the request carrying a PERSISTENT notice
- * @return None
- *
- * TODO: Only volatile log is supported so far.
- */
-M0_INTERNAL void m0_be_dtm0_log_pmsg_post(struct m0_be_dtm0_log *log,
-					  struct m0_fop         *fop);
+M0_INTERNAL void m0_be_dtm0_volatile_log_del(struct m0_be_dtm0_log  *log,
+					     struct m0_dtm0_log_rec *rec,
+					     bool                    fini);
 
 
 /**
  * DTM0 Log iterator
  *
- * Provides a way to iterate over the DTM0 Log structure. Today has a very
- * inefficient implementation and used to glue log related code together with
+ * Provides a way to iterate over the DTM0 Log structure. Today it has a very
+ * inefficient implementation and is used to glue log related code together with
  * redo logic and expose interfaces which hopefully will not change.
  */
 struct m0_be_dtm0_log_iter {
@@ -566,7 +550,7 @@ M0_INTERNAL void m0_be_dtm0_log_iter_fini(struct m0_be_dtm0_log_iter *iter);
 /**
  * Returns next record of the iterator pointing to the log.
  *
- * @param out returned record which is copied and need to be freed with
+ * @param out returned record which is copied and needs to be freed with
  *            m0_dtm0_log_iter_rec_fini()
  *
  * @return +1 when the iterator was successfully moved to the next record.

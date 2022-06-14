@@ -360,22 +360,14 @@ static int plog_rec_init(struct m0_dtm0_log_rec **out,
 	return 0;
 }
 
-/*
- * TODO: change convention of this function to:
- * void log_rec_fini(struct m0_dtm0_log_rec *rec, ..*tx)
- * and free rec outside the function
- */
-static void log_rec_fini(struct m0_dtm0_log_rec **rec,
-			 struct m0_be_tx         *tx)
+static void log_rec_fini(struct m0_dtm0_log_rec *rec,
+			 struct m0_be_tx        *tx)
 {
-	struct m0_dtm0_log_rec *lrec = *rec;
-
-	M0_ASSERT_INFO(M0_IS0(&lrec->dlr_dtx), "DTX should have been finalised "
+	M0_ASSERT_INFO(M0_IS0(&rec->dlr_dtx), "DTX should have been finalised "
 		       "already in m0_dtx0_done().");
-	m0_buf_free(&lrec->dlr_payload);
-	m0_dtm0_tx_desc_fini(&lrec->dlr_txd);
-	m0_free(lrec);
-	*rec = NULL;
+	m0_buf_free(&rec->dlr_payload);
+	m0_dtm0_tx_desc_fini(&rec->dlr_txd);
+	m0_free(rec);
 }
 
 /*
@@ -510,10 +502,10 @@ M0_INTERNAL int m0_be_dtm0_log_prune(struct m0_be_dtm0_log    *log,
 	 * previous records and then this record. */
 	while ((currec = lrec_tlist_pop(log->u.dl_inmem)) != rec) {
 		M0_ASSERT(m0_dtm0_log_rec__invariant(currec));
-		log_rec_fini(&currec, tx);
+		log_rec_fini(currec, tx);
 	}
 
-	log_rec_fini(&rec, tx);
+	log_rec_fini(rec, tx);
 	return rc;
 }
 
@@ -534,7 +526,7 @@ M0_INTERNAL void m0_be_dtm0_log_clear(struct m0_be_dtm0_log *log)
 		M0_ASSERT(m0_dtm0_log_rec__invariant(rec));
 		M0_ASSERT(m0_dtm0_tx_desc_state_eq(&rec->dlr_dtx.dd_txd,
 						   M0_DTPS_PERSISTENT));
-		log_rec_fini(&rec, NULL);
+		log_rec_fini(rec, NULL);
 	}
 	M0_POST(lrec_tlist_is_empty(log->u.dl_inmem));
 
@@ -563,13 +555,13 @@ M0_INTERNAL void m0_be_dtm0_volatile_log_update(struct m0_be_dtm0_log  *log,
 	m0_dtm0_tx_desc_apply(&rec->dlr_txd, &rec->dlr_dtx.dd_txd);
 }
 
-M0_INTERNAL void m0_be_dtm0_volatile_log_del(struct m0_be_dtm0_log   *log,
-					     struct m0_dtm0_log_rec **rec,
-					     bool                     fini)
+M0_INTERNAL void m0_be_dtm0_volatile_log_del(struct m0_be_dtm0_log  *log,
+					     struct m0_dtm0_log_rec *rec,
+					     bool                    fini)
 {
 	M0_PRE(m0_mutex_is_locked(&log->dl_lock));
 
-	lrec_tlist_del(*rec);
+	lrec_tlist_del(rec);
 	if (fini)
 		log_rec_fini(rec, NULL);
 }
@@ -649,20 +641,6 @@ M0_INTERNAL int m0_be_dtm0_plog_prune(struct m0_be_dtm0_log    *log,
 	return 0;
 }
 
-M0_INTERNAL void m0_be_dtm0_log_pmsg_post(struct m0_be_dtm0_log *log,
-					  struct m0_fop         *fop)
-{
-	M0_PRE(log != NULL);
-	M0_PRE(!log->dl_is_persistent);
-	M0_PRE(fop->f_type == &dtm0_req_fop_fopt);
-
-	M0_ENTRY("fop=%p", fop);
-
-	m0_dtm0_dtx_pmsg_post(log, fop);
-
-	M0_LEAVE();
-}
-
 static const struct m0_dtm0_tid dtm0_log_iter_tid0 =
 		(struct m0_dtm0_tid) { .dti_ts = { .dts_phys = ~0 } };
 
@@ -675,9 +653,8 @@ static bool be_dtm0_log_iter_is_first(const struct m0_be_dtm0_log_iter *iter)
 static bool be_dtm0_log_iter_invariant(const struct m0_be_dtm0_log_iter *iter)
 {
 	return _0C(m0_be_dtm0_log__invariant(iter->dli_log)) &&
-		(be_dtm0_log_iter_is_first(iter)
-		 ? _0C(true)
-		 : _0C(m0_dtm0_tid__invariant(&iter->dli_current_tid)));
+	       _0C(be_dtm0_log_iter_is_first(iter) ||
+		   m0_dtm0_tid__invariant(&iter->dli_current_tid));
 }
 
 M0_INTERNAL void m0_be_dtm0_log_iter_init(struct m0_be_dtm0_log_iter *iter,

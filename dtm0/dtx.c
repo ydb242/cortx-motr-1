@@ -176,7 +176,7 @@ static void dtx_fini(struct m0_dtm0_dtx *dtx)
 	m0_dtm0_tx_desc_fini(&dtx->dd_txd);
 	M0_SET0(dtx);
 	if (!log->dl_is_persistent)
-		m0_be_dtm0_volatile_log_del(log, &rec, true);
+		m0_be_dtm0_volatile_log_del(log, rec, true);
 }
 
 static void dtx_prepare(struct m0_dtm0_dtx *dtx)
@@ -379,7 +379,7 @@ static void dtx_persistent_ast_cb(struct m0_sm_group *grp,
 }
 
 M0_INTERNAL void m0_dtm0_dtx_pmsg_post(struct m0_be_dtm0_log *log,
-				       struct m0_fop      *fop)
+				       struct m0_fop         *fop)
 {
 	struct m0_dtm0_pmsg_ast      *pma;
 	struct m0_sm_group           *dtx_sm_grp;
@@ -390,6 +390,8 @@ M0_INTERNAL void m0_dtm0_dtx_pmsg_post(struct m0_be_dtm0_log *log,
 	M0_PRE(fop != NULL);
 	M0_PRE(fop->f_opaque != NULL);
 	M0_PRE(m0_fop_data(fop) != NULL);
+	M0_PRE(fop->f_type == &dtm0_req_fop_fopt);
+	M0_PRE(!log->dl_is_persistent);
 
 	M0_ENTRY("fop=%p", fop);
 
@@ -405,16 +407,9 @@ M0_INTERNAL void m0_dtm0_dtx_pmsg_post(struct m0_be_dtm0_log *log,
 	m0_mutex_unlock(&log->dl_lock);
 
 	if (rec != NULL) {
-		/*
-		 * XXX: it is an uncommon case where f_opaque is used on the
-		 * server side (rather than on the client side) to associate
-		 * a FOP with a user-defined datum. It helps to connect the
-		 * lifetime of the AST that handles the notice with the lifetime
-		 * of the FOP that has delivered the notice.
-		 */
+		M0_ASSERT(fop->f_opaque != NULL);
 		pma = fop->f_opaque;
-		M0_ASSERT_INFO(M0_IS0(pma), "PMA cannot be re-used");
-		*pma = (struct  m0_dtm0_pmsg_ast) {
+		*pma = (struct m0_dtm0_pmsg_ast) {
 			.p_log = log,
 			.p_fop = fop,
 			.p_ast = {
@@ -422,7 +417,10 @@ M0_INTERNAL void m0_dtm0_dtx_pmsg_post(struct m0_be_dtm0_log *log,
 				.sa_datum = pma,
 			},
 		};
-		m0_fop_get(fop); /* it will be put back by ::dtx_persistent_ast_cb */
+		/* pma will be freed by ::dtx_persistent_ast_cb */
+		fop->f_opaque = NULL;
+		/* It will be put back by ::dtx_persistent_ast_cb */
+		m0_fop_get(fop);
 		m0_sm_ast_post(dtx_sm_grp, &pma->p_ast);
 	}
 	M0_LEAVE();
