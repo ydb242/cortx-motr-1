@@ -734,10 +734,8 @@ int m0_obj_op(struct m0_obj       *obj,
 		  opcode == M0_OC_FREE ? "free" : "");
 	M0_PRE(obj != NULL);
 	M0_PRE(op != NULL);
-	M0_PRE(ergo(opcode == M0_OC_READ,
-		    !(flags & ~(M0_OOF_HOLE|M0_OOF_LAST))));
-	M0_PRE(ergo(opcode != M0_OC_READ,
-		    !(flags & ~(M0_OOF_SYNC|M0_OOF_LAST|M0_OOF_FULL))));
+	M0_PRE(ergo(opcode == M0_OC_READ, M0_IN(flags, (0, M0_OOF_HOLE))));
+	M0_PRE(ergo(opcode != M0_OC_READ, M0_IN(flags, (0, M0_OOF_SYNC))));
 	if (M0_FI_ENABLED("fail_op"))
 		return M0_ERR(-EINVAL);
 
