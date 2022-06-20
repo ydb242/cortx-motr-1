@@ -478,7 +478,7 @@ enum {
 	M0_MIN_BUF_SHIFT            = 9,
 
 	/* RPC */
-	M0_RPC_TIMEOUT              = 60, /* Seconds */
+	M0_RPC_TIMEOUT              = 600, /* Seconds */
 	M0_RPC_MAX_RETRIES          = 60,
 	M0_RPC_RESEND_INTERVAL      = M0_MKTIME(M0_RPC_TIMEOUT, 0) /
 					  M0_RPC_MAX_RETRIES,
