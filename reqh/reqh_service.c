@@ -837,9 +837,12 @@ M0_INTERNAL int m0_reqh_service_disconnect_wait(struct m0_reqh_service_ctx *ctx)
 static void reqh_service_reconnect_locked(struct m0_reqh_service_ctx *ctx,
 					  const char                 *addr)
 {
-	M0_PRE(addr != NULL &&
-	       strcmp(addr, m0_rpc_link_end_point(&ctx->sc_rlink)) == 0);
+	M0_ENTRY("ctx=%p, addr='%s', endpoint=%s",
+		ctx, addr, m0_rpc_link_end_point(&ctx->sc_rlink));
 
+/*	M0_PRE(addr != NULL &&
+	       strcmp(addr, m0_rpc_link_end_point(&ctx->sc_rlink)) == 0);
+*/
 	if (M0_IN(CTX_STATE(ctx), (M0_RSC_DISCONNECTING,
 				   M0_RSC_CONNECTING))) {
 		/* 'ING states reach ONLINE eventually */
