@@ -53,7 +53,7 @@ static struct m0_rpc_conn_pool_item *find_item_by_ep(
 	M0_ENTRY();
 	M0_PRE(m0_mutex_is_locked(&pool->cp_mutex));
 	m0_tl_for(rpc_conn_pool_items, &pool->cp_items, pool_item) {
-		if (!strcmp(m0_rpc_conn_addr(&pool_item->cpi_rpc_link.rlk_conn),
+		if (!m0_net_ip_addr_eq(m0_rpc_conn_addr(&pool_item->cpi_rpc_link.rlk_conn),
 			    remote_ep))
 		{
 			ret = pool_item;
