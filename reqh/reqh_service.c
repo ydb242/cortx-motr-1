@@ -838,7 +838,7 @@ static void reqh_service_reconnect_locked(struct m0_reqh_service_ctx *ctx,
 					  const char                 *addr)
 {
 	M0_PRE(addr != NULL &&
-	       m0_net_ip_addr_eq(addr, m0_rpc_link_end_point(&ctx->sc_rlink)) == 0);
+	       strcmp(addr, m0_rpc_link_end_point(&ctx->sc_rlink)) == 0);
 
 	if (M0_IN(CTX_STATE(ctx), (M0_RSC_DISCONNECTING,
 				   M0_RSC_CONNECTING))) {

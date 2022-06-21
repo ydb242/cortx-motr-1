@@ -647,7 +647,7 @@ static int cm_replicas_connect(struct m0_cm *cm, struct m0_rpc_machine *rmach,
 
 		M0_LOG(M0_DEBUG, "Connect %s dep %s type %d", lep, dep,
 				ctx->sc_type);
-		if ((m0_net_ip_addr_eq(lep, dep) == 0 ||
+		if ((strcmp(lep, dep) == 0 ||
 		    !cm->cm_ops->cmo_is_peer(cm, ctx)))
 			continue;
                 rc = m0_conf_obj_find_lock(&pc->pc_confc->cc_cache,
