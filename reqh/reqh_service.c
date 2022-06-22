@@ -884,6 +884,7 @@ static void reqh_service_session_cancel(struct m0_reqh_service_ctx *ctx)
 
 static bool reqh_service_ctx_is_cancelled(struct m0_reqh_service_ctx *ctx)
 {
+	M0_ENTRY("reqh context is cancelled");
 	M0_PRE(reqh_service_ctx_sm_is_locked(ctx));
 
 	return reqh_service_ctx_flag_is_set(ctx, M0_RSC_RLINK_CANCEL) ||
@@ -1104,6 +1105,8 @@ static bool process_event_handler(struct m0_clink *clink)
 		 * will become active again after reconnection when process is
 		 * restarted.
 		 */
+                M0_LOG(M0_ALWAYS, "recieved transient/failed for "FID_F" state = %d",
+				   FID_P(&obj->co_id), obj->co_ha_state);
 		if (!reqh_service_ctx_is_cancelled(ctx))
 			reqh_service_session_cancel(ctx);
 		break;

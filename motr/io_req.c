@@ -1512,6 +1512,7 @@ static int device_check(struct m0_op_io *ioo)
 			is_session_marked(ioo, ti->ti_session);
 		} else if (M0_IN(ti->ti_rc, (-ECANCELED, -ENOTCONN)) &&
 			   !is_session_marked(ioo, ti->ti_session)) {
+			M0_LOG(M0_ALWAYS, "Got session cancel for %p", ti->ti_session);
 			M0_CNT_INC(fsvc_nr);
 		} else if ((M0_IN(state, (M0_PNDS_FAILED, M0_PNDS_OFFLINE,
 				  M0_PNDS_SNS_REPAIRING, M0_PNDS_SNS_REPAIRED))

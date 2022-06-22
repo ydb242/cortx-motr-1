@@ -575,7 +575,7 @@ M0_INTERNAL int m0_rpc_session_validate(struct m0_rpc_session *session)
 	M0_ENTRY();
 	M0_PRE(session != NULL);
 	if (session->s_cancelled)
-		return M0_ERR_INFO(-ECANCELED, "Cancelled session");
+		return M0_ERR_INFO(-ECANCELED, "Cancelled session %p", session);
 	if (!M0_IN(session_state(session), (M0_RPC_SESSION_IDLE,
 					    M0_RPC_SESSION_BUSY)))
 		return M0_ERR_INFO(-EINVAL, "Session state %s is not valid",

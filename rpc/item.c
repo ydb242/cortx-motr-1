@@ -566,8 +566,9 @@ M0_INTERNAL void m0_rpc_item_xid_assign(struct m0_rpc_item *item)
 {
 	M0_PRE(m0_rpc_machine_is_locked(item->ri_rmachine));
 
-	M0_ENTRY("item: "ITEM_FMT" nr_sent=%d xid=%"PRIu64, ITEM_ARG(item),
-		 item->ri_nr_sent, item->ri_header.osr_xid);
+	M0_ENTRY("item: "ITEM_FMT" nr_sent=%d xid=%"PRIu64 "session = %p",
+		 ITEM_ARG(item), item->ri_nr_sent, item->ri_header.osr_xid,
+		 item->ri_session);
 	/*
 	 * xid needs to be assigned only once.
 	 * At this point ri_nr_sent is already incremented.
