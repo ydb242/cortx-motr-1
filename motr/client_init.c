@@ -918,6 +918,7 @@ static int confc_init(struct m0_client *m0c)
 	reqh = &m0c->m0c_reqh;
 	rconfcp = rconfc(m0c);
 
+	M0_LOG(M0_ALWAYS, "Atul Debug Entry");
 	/*
 	 * confc needs the ast thread to make progress, and we block
 	 * it with this lock.
@@ -937,18 +938,19 @@ static int confc_init(struct m0_client *m0c)
 			  &m0c->m0c_conf_ready_async);
 	m0_ref_init(&m0c->m0c_ongoing_io, 0, io_ref_cb);
 
+	M0_LOG(M0_ALWAYS, "Atul Debug calling m0_rconfc_start_sync");
 	rc = m0_rconfc_start_sync(rconfcp);
 	if (rc != 0)
 		goto err_rconfc_stop;
-
+	M0_LOG(M0_ALWAYS, "Atul Debug calling m0_confc_root_open");
 	rc = m0_confc_root_open(m0_reqh2confc(reqh), &conf_root);
 	if (rc != 0)
 		goto err_rconfc_stop;
-
+	M0_LOG(M0_ALWAYS, "Atul Debug calling m0_conf_full_load");
 	rc = m0_conf_full_load(conf_root);
 	if (rc != 0)
 		goto err_conf_close;
-
+	M0_LOG(M0_ALWAYS, "Atul Debug calling m0_conf_confc_ha_update");
 	rc = m0_conf_confc_ha_update(m0_reqh2confc(reqh));
 	if (rc != 0)
 		goto err_conf_close;
@@ -960,9 +962,11 @@ static int confc_init(struct m0_client *m0c)
 
 	/* re-acquire the lock */
 	m0_sm_group_lock(&m0c->m0c_sm_group);
+	M0_LOG(M0_ALWAYS, "Atul Debug Exit");
 	return M0_RC(0);
 
 err_conf_close:
+	M0_LOG(M0_ALWAYS, "Atul Debug in err_conf_close");
 	m0_confc_close(&conf_root->rt_obj);
 
 err_rconfc_stop:
