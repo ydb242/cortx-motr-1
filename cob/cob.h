@@ -237,7 +237,7 @@ enum {
 #define M0_COB_ROOT_NODE_ALIGN (4 * 1024)
 
 enum {
-	M0_COB_ROOT_NODE_SIZE = (8 * 1024),
+	M0_COB_ROOT_NODE_SIZE = (64 * 1024),
 
 	/** This should align to Block size on the storage. Change as needed */
 };
