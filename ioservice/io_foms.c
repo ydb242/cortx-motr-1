@@ -2234,7 +2234,6 @@ static int m0_io_fom_cob_rw_tick(struct m0_fom *fom)
 {
 	int                                       rc;
 	int                                       phase = m0_fom_phase(fom);
-	m0_bcount_t                               byte_count;
 	struct m0_fid                             pver;
 	struct m0_cob                            *cob;
 	struct m0_io_fom_cob_rw                  *fom_obj;
@@ -2249,7 +2248,6 @@ static int m0_io_fom_cob_rw_tick(struct m0_fom *fom)
 	M0_ASSERT(m0_io_fom_cob_rw_invariant(fom_obj));
 
 	rwfop = io_rw_get(fom->fo_fop);
-	byte_count = m0_io_count(&rwfop->crw_ivec);
 	pver = rwfop->crw_pver;
 
 	M0_ENTRY("fom %p, fop %p, item %p[%u] %s" FID_F, fom, fom->fo_fop,
@@ -2335,15 +2333,19 @@ static int m0_io_fom_cob_rw_tick(struct m0_fom *fom)
 
 	M0_ASSERT(m0_io_fom_cob_rw_invariant(fom_obj));
 
-	if (m0_fom_phase(fom) == M0_FOPH_SUCCESS &&
+	if (rwfop->crw_is_data_fop && m0_fom_phase(fom) == M0_FOPH_SUCCESS &&
 	    m0_is_write_fop(fom->fo_fop)) {
 		int                 bc_rc;
 		struct m0_cob_bckey key;
+	        m0_bcount_t         byte_count;
 
 		key.cbk_pfid = pver;
 		key.cbk_user_id = M0_BYTECOUNT_USER_ID;
 		bc_rc = fom_cob_locate(fom);
 		if (bc_rc == 0) {
+			byte_count = m0_io_count(&rwfop->crw_ivec);
+			M0_LOG(M0_ALWAYS, "YJC: byte_count = %"PRIu64,
+					   byte_count);
 			cob = fom_obj->fcrw_cob;
 			cob_bytecount_increment(cob, &key, byte_count,
 						m0_fom_tx(fom));

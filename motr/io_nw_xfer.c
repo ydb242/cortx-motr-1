@@ -949,6 +949,7 @@ static int target_ioreq_iofops_prepare(struct target_ioreq *ti,
 
 		iofop = &irfop->irf_iofop;
 		rw_fop = io_rw_get(&iofop->if_fop);
+		rw_fop->crw_is_data_fop = filter & PA_DATA ? 1 : 0;
 
 		rc = bulk_buffer_add(irfop, ndom, &rbuf, &delta, maxsize);
 		if (rc != 0) {
