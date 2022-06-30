@@ -297,6 +297,7 @@ M0_INTERNAL int m0_dtm0_logrec_update(struct m0_be_dtm0_log  *log,
 {
 	int rc;
 
+	return 0;
 	M0_ENTRY();
 
 	m0_mutex_lock(&log->dl_lock);
